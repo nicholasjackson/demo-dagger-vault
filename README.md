@@ -2,8 +2,8 @@
 
 ## Todo
 
-- [ ] Create a Vault server
-- [ ] Create a Kubernetes server
+- [x] Create a Vault server
+- [x] Create a Kubernetes server
 - [ ] Configure Kubernetes Auth in Vault
 - [ ] Configure OIDC Auth in Vault to enable GitHub Actions to login
 - [ ] Configure OIDC Auth in Vault to enable CircleCI to login
