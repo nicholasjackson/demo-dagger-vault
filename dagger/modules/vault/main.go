@@ -37,7 +37,7 @@ func (v *Vault) WithHost(host string) *Vault {
 }
 
 // WithUserpassAuth sets the userpass autrhentication for the Vault client
-func (v *Vault) WtihUserpassAuth(ctx context.Context, username, password string, path Optional[string]) *Vault {
+func (v *Vault) WithUserpassAuth(ctx context.Context, username, password string, path Optional[string]) *Vault {
 	v.userpass = &UserpassAuth{
 		username: username,
 		password: password,

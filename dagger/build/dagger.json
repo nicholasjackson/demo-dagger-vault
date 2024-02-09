@@ -1,0 +1,9 @@
+{
+  "name": "build",
+  "sdk": "go",
+  "root-for": [
+    {
+      "source": "."
+    }
+  ]
+}

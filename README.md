@@ -1,5 +1,16 @@
 # HashiTalks 2024 Vault Secrets with Dagger Demo Repo
 
+## Building the Application
+
+To build the application you will need to have the dagger CLI and Docker installed.
+
+With the environment variables set for the Docker username and password you can run the 
+following command to build the application and push the resulting image to Docker Hub.
+
+```bash
+dagger -m ./dagger/build call all --src ./src --docker-username=DOCKER_USERNAME --docker-password=DOCKER_PASSWORD
+```
+
 ## Authenticate Vault as a user
 
 You can use onepassword to set the userpass details for Vault
@@ -132,17 +143,17 @@ vault write kubernetes/hashitalks/roles/admin \
 Example: Create an admin token for the default namespace.
 
 ```shell
-export KUBE_TOKEN=$(vault write kubernetes/hashitalks/creds/list-pods kubernetes_namespace=default -format=json | jq -r .data.service_account_token)
+export KUBE_TOKEN=$(vault write kubernetes/hashitalks/creds/admin kubernetes_namespace=default -format=json | jq -r .data.service_account_token)
 ```
 
 #### deployment role for the default namespace
 
-The following role allows the creation and updating of pods in the default namespace.
+The following role allows the creation and updating of pods, deployments, and services in the default namespace.
 
 ```bash
 vault write kubernetes/hashitalks/roles/deployer-default \
   allowed_kubernetes_namespaces="default" \
-  generated_role_rules="'rules': [{'apiGroups': [''], 'resources': ['pods'], 'verbs': ['create', 'update']}]"
+  generated_role_rules="'rules': [{'apiGroups': [''], 'resources': ['pods','services'], 'verbs': ['get', 'list', 'create', 'update', 'patch', 'delete']},{'apiGroups': ['apps'], 'resources': ['deployments'], 'verbs': ['get', 'list', 'create', 'update', 'patch', 'delete']}]"
 ```
 
 Example: Create a deployment token for the default namespace.
@@ -150,6 +161,16 @@ Example: Create a deployment token for the default namespace.
 ```shell
 export KUBE_TOKEN=$(vault write kubernetes/hashitalks/creds/deployer-default -format=json | jq -r .data.service_account_token)
 ```
+
+This can be used to deploy the application to the default namespace.
+
+```shell
+kubectl apply -f ./src/kubernetes/deploy.yaml --server="${KUBE_HOST}" --token="${KUBE_TOKEN}" -n default --insecure-skip-tls-verify
+```
+
+## Configure GitHub Actions to authenticate with Vault
+
+https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-hashicorp-vault
 
 ## Todo
 
