@@ -24,16 +24,19 @@ type Vault struct {
 	userpass *UserpassAuth
 }
 
+// WithNamespace sets the namespace for the Vault client
 func (v *Vault) WithNamespace(namespace string) *Vault {
 	v.namespace = namespace
 	return v
 }
 
+// WithHost sets the host for the Vault client
 func (v *Vault) WithHost(host string) *Vault {
 	v.host = host
 	return v
 }
 
+// WithUserpassAuth sets the userpass autrhentication for the Vault client
 func (v *Vault) WtihUserpassAuth(ctx context.Context, username, password string, path Optional[string]) *Vault {
 	v.userpass = &UserpassAuth{
 		username: username,
@@ -44,6 +47,7 @@ func (v *Vault) WtihUserpassAuth(ctx context.Context, username, password string,
 	return v
 }
 
+// GetSecretJSON returns a vault secert as a JSON string
 func (v *Vault) GetSecretJSON(ctx context.Context, secret string, params Optional[string], operationType Optional[string]) (string, error) {
 	// if the operation type is not set, default to read
 	secretType := operationType.GetOr("read")
@@ -92,6 +96,8 @@ func (v *Vault) GetSecretJSON(ctx context.Context, secret string, params Optiona
 	return string(js), nil
 }
 
+// TestGetSecret is a test function for the GetSecretJSON function
+// example usage: dagger call test-get-secret --host ${VAULT_ADDR} --namespace=${VAULT_NAMESPACE} --username=VAULT_USER --password=VAULT_PASSWORD --secret=kubernetes/hashitalks/creds/deployer-default --params="kubernetes_namespace=default" --op-type=write
 func (v *Vault) TestGetSecret(ctx context.Context, host, namespace string, username, password *Secret, secret string, params string, opType string) (string, error) {
 	// set the debug logger
 	log.SetLevel(log.DebugLevel)
