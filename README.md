@@ -162,7 +162,7 @@ export KUBE_TOKEN=$(vault write kubernetes/hashitalks/creds/deployer-default -fo
 - [x] Create a Kubernetes server
 - [x] Configure Kubernetes Auth in Vault
 - [x] Create Roles to access Kubernetes
-- [ ] Create a Simple module to access Vault Secrets from Dagger
+- [x] Create a Simple module to access Vault Secrets from Dagger
 - [ ] Create a Dagger config to build an application and deploy to Kubernetes
 - [ ] Configure OIDC Auth in Vault to enable GitHub Actions to login
 - [ ] Add a GitHub Action to run Dagger
