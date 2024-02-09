@@ -44,11 +44,6 @@ The secrets engine needs the following information:
 
 ```bash
 vault write kubernetes/hashitalks/config \
-  kubernetes_ca_cert="$(op item get 'HashiTalks 2024' --fields 'Kubernetes.cluster_ca' | sed 's/"//g' | sed -z 's/\n/\\n/g' | sed -z 's/\\n$//')" \
-  kubernetes_host="$(op item get 'HashiTalks 2024' --fields 'Kubernetes.host')" \
-  service_account_jwt="$(op item get 'HashiTalks 2024' --fields 'Kubernetes.sa_token')"
-
-vault write kubernetes/hashitalks/config \
   kubernetes_ca_cert="$(op item get 'HashiTalks 2024' --fields 'Kubernetes.cluster_ca' | sed 's/"//g')" \
   kubernetes_host="$(op item get 'HashiTalks 2024' --fields 'Kubernetes.host')" \
   service_account_jwt="$(op item get 'HashiTalks 2024' --fields 'Kubernetes.sa_token')"
@@ -104,7 +99,7 @@ vault write kubernetes/hashitalks/roles/list-pods \
 A token can be generate for the role using the following command:
 
 ```bash
-vault write kubernetes/hashitalks/creds/list-pods kuberntes_namespace=default
+vault write kubernetes/hashitalks/creds/list-pods kubernetes_namespace=default
 ```
 
 This can then be used to access the Kubernetes API
@@ -160,7 +155,7 @@ export KUBE_TOKEN=$(vault write kubernetes/hashitalks/creds/deployer-default -fo
 
 - [x] Create a Vault server
 - [x] Create a Kubernetes server
-- [x] Configure Kubernetes Auth in Vault
+- [x] Configure Kubernetes secrets engine in Vault
 - [x] Create Roles to access Kubernetes
 - [x] Create a Simple module to access Vault Secrets from Dagger
 - [ ] Create a Dagger config to build an application and deploy to Kubernetes
