@@ -3,8 +3,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: hashitalks
-  labels:
-    app: hashitalks
 spec:
   replicas: 3
   selector:
@@ -25,11 +23,13 @@ apiVersion: v1
 kind: Service
 metadata:
   name: hashitalks
-spec:
-  selector:
+  labels:
     app.kubernetes.io/name: hashitalks
+spec:
   ports:
     - protocol: TCP
       port: 80
       targetPort: 8080
   type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: hashitalks
