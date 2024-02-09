@@ -1,0 +1,9 @@
+{
+  "name": "vault",
+  "sdk": "go",
+  "root-for": [
+    {
+      "source": "."
+    }
+  ]
+}
