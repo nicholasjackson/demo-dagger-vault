@@ -37,31 +37,39 @@ func (v *Vault) WithHost(host string) *Vault {
 }
 
 // WithUserpassAuth sets the userpass autrhentication for the Vault client
-func (v *Vault) WithUserpassAuth(ctx context.Context, username, password string, path Optional[string]) *Vault {
+func (v *Vault) WithUserpassAuth(
+	ctx context.Context,
+	username, password string,
+	// +optional
+	// +default=userpass
+	path string,
+) *Vault {
 	v.userpass = &UserpassAuth{
 		username: username,
 		password: password,
-		path:     path.GetOr("userpass"),
+		path:     path,
 	}
 
 	return v
 }
 
 // GetSecretJSON returns a vault secert as a JSON string
-func (v *Vault) GetSecretJSON(ctx context.Context, secret string, params Optional[string], operationType Optional[string]) (string, error) {
-	// if the operation type is not set, default to read
-	secretType := operationType.GetOr("read")
-
+func (v *Vault) GetSecretJSON(
+	ctx context.Context,
+	secret string,
+	// +optional
+	params string,
+	// +optional
+	// +default=read
+	operationType string,
+) (string, error) {
 	c, err := v.getClient(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	// parse the params
-	sp := params.GetOr("")
-
 	body := map[string]interface{}{}
-	ps := strings.Split(sp, ",")
+	ps := strings.Split(params, ",")
 	for _, p := range ps {
 		kv := strings.Split(p, "=")
 		if len(kv) == 2 {
@@ -69,12 +77,12 @@ func (v *Vault) GetSecretJSON(ctx context.Context, secret string, params Optiona
 		}
 	}
 
-	log.Debug("Getting secret", "secret", secret, "namespace", v.namespace, "type", secretType, "params", params)
+	log.Debug("Getting secret", "secret", secret, "namespace", v.namespace, "type", operationType, "params", params)
 
 	var resp *vault.Response[map[string]interface{}]
 	var respErr error
 
-	switch secretType {
+	switch operationType {
 	case "read":
 		resp, respErr = c.Read(ctx, secret, vault.WithNamespace(v.namespace))
 		if err != nil {
@@ -114,7 +122,7 @@ func (v *Vault) TestGetSecret(ctx context.Context, host, namespace string, usern
 		path:     "userpass",
 	}
 
-	d, err := v.GetSecretJSON(ctx, secret, Opt[string](params), Opt[string](opType))
+	d, err := v.GetSecretJSON(ctx, secret, params, opType)
 	if err != nil {
 		return "", err
 	}
