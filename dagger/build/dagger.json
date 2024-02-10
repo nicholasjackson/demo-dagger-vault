@@ -4,7 +4,7 @@
   "dependencies": [
     {
       "name": "vault",
-      "source": "github.com/nicholasjackson/demo-dagger-vault/dagger/modules/vault@e349100dec5a98859c98392704cfffbb0e33e200"
+      "source": "github.com/nicholasjackson/demo-dagger-vault/dagger/modules/vault@2074b3a0a308ebf8d6d7de45f43719531afb6ff5"
     }
   ],
   "source": ".",

@@ -12,27 +12,27 @@ import (
 )
 
 type UserpassAuth struct {
-	username string
-	password string
-	path     string
+	Username string
+	Password string
+	Path     string
 }
 
 type Vault struct {
-	namespace string
-	host      string
+	Namespace string
+	Host      string
 
-	userpass *UserpassAuth
+	Userpass *UserpassAuth
 }
 
 // WithNamespace sets the namespace for the Vault client
 func (v *Vault) WithNamespace(namespace string) *Vault {
-	v.namespace = namespace
+	v.Namespace = namespace
 	return v
 }
 
 // WithHost sets the host for the Vault client
 func (v *Vault) WithHost(host string) *Vault {
-	v.host = host
+	v.Host = host
 	return v
 }
 
@@ -44,10 +44,10 @@ func (v *Vault) WithUserpassAuth(
 	// +default=userpass
 	path string,
 ) *Vault {
-	v.userpass = &UserpassAuth{
-		username: username,
-		password: password,
-		path:     path,
+	v.Userpass = &UserpassAuth{
+		Username: username,
+		Password: password,
+		Path:     path,
 	}
 
 	return v
@@ -77,20 +77,20 @@ func (v *Vault) GetSecretJSON(
 		}
 	}
 
-	log.Debug("Getting secret", "secret", secret, "namespace", v.namespace, "type", operationType, "params", params)
+	log.Debug("Getting secret", "secret", secret, "namespace", v.Namespace, "type", operationType, "params", params)
 
 	var resp *vault.Response[map[string]interface{}]
 	var respErr error
 
 	switch operationType {
 	case "read":
-		resp, respErr = c.Read(ctx, secret, vault.WithNamespace(v.namespace))
+		resp, respErr = c.Read(ctx, secret, vault.WithNamespace(v.Namespace))
 		if respErr != nil {
 			return "", fmt.Errorf("failed to read secret: %w", respErr)
 		}
 
 	case "write":
-		resp, respErr = c.Write(ctx, secret, body, vault.WithNamespace(v.namespace))
+		resp, respErr = c.Write(ctx, secret, body, vault.WithNamespace(v.Namespace))
 		if respErr != nil {
 			return "", fmt.Errorf("failed to read secret: %w", respErr)
 		}
@@ -106,20 +106,32 @@ func (v *Vault) GetSecretJSON(
 
 // TestGetSecret is a test function for the GetSecretJSON function
 // example usage: dagger call test-get-secret --host ${VAULT_ADDR} --namespace=${VAULT_NAMESPACE} --username=VAULT_USER --password=VAULT_PASSWORD --secret=kubernetes/hashitalks/creds/deployer-default --params="kubernetes_namespace=default" --op-type=write
-func (v *Vault) TestGetSecret(ctx context.Context, host, namespace string, username, password *Secret, secret string, params string, opType string) (string, error) {
+func (v *Vault) TestGetSecret(
+	ctx context.Context,
+	host,
+	namespace string,
+	username,
+	password *Secret,
+	secret string,
+	// +optional
+	// +default=read
+	opType string,
+	// +optional
+	params string,
+) (string, error) {
 	// set the debug logger
 	log.SetLevel(log.DebugLevel)
 
-	v.namespace = namespace
-	v.host = host
+	v.Namespace = namespace
+	v.Host = host
 
 	u, _ := username.Plaintext(ctx)
 	p, _ := password.Plaintext(ctx)
 
-	v.userpass = &UserpassAuth{
-		username: u,
-		password: p,
-		path:     "userpass",
+	v.Userpass = &UserpassAuth{
+		Username: u,
+		Password: p,
+		Path:     "userpass",
 	}
 
 	d, err := v.GetSecretJSON(ctx, secret, params, opType)
@@ -132,20 +144,20 @@ func (v *Vault) TestGetSecret(ctx context.Context, host, namespace string, usern
 
 func (v *Vault) getClient(ctx context.Context) (*vault.Client, error) {
 	client, err := vault.New(
-		vault.WithAddress(v.host),
+		vault.WithAddress(v.Host),
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if v.userpass != nil {
-		vr, err := client.Auth.UserpassLogin(ctx, v.userpass.username, schema.UserpassLoginRequest{Password: v.userpass.password}, vault.WithNamespace(v.namespace))
+	if v.Userpass != nil {
+		vr, err := client.Auth.UserpassLogin(ctx, v.Userpass.Username, schema.UserpassLoginRequest{Password: v.Userpass.Password}, vault.WithNamespace(v.Namespace))
 		if err != nil {
 			return nil, fmt.Errorf("failed to login: %w", err)
 		}
 
-		log.Debug("Logged in as", "user", v.userpass.username)
+		log.Debug("Logged in as", "user", v.Userpass.Username)
 		client.SetToken(vr.Auth.ClientToken)
 	}
 

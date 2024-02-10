@@ -6622,11 +6622,33 @@ func (c errorWrappedClient) MakeRequest(ctx context.Context, req *graphql.Reques
 }
 
 func (r *Vault) UnmarshalJSON(bs []byte) error {
-	var concrete struct{}
+	var concrete struct {
+		Namespace string
+		Host      string
+		Userpass  *UserpassAuth
+	}
 	err := json.Unmarshal(bs, &concrete)
 	if err != nil {
 		return err
 	}
+	r.Namespace = concrete.Namespace
+	r.Host = concrete.Host
+	r.Userpass = concrete.Userpass
+	return nil
+}
+func (r *UserpassAuth) UnmarshalJSON(bs []byte) error {
+	var concrete struct {
+		Username string
+		Password string
+		Path     string
+	}
+	err := json.Unmarshal(bs, &concrete)
+	if err != nil {
+		return err
+	}
+	r.Username = concrete.Username
+	r.Password = concrete.Password
+	r.Path = concrete.Path
 	return nil
 }
 
@@ -6816,13 +6838,6 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg secret", err))
 				}
 			}
-			var params string
-			if inputArgs["params"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["params"]), &params)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg params", err))
-				}
-			}
 			var opType string
 			if inputArgs["opType"] != nil {
 				err = json.Unmarshal([]byte(inputArgs["opType"]), &opType)
@@ -6830,7 +6845,14 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg opType", err))
 				}
 			}
-			return (*Vault).TestGetSecret(&parent, ctx, host, namespace, username, password, secret, params, opType)
+			var params string
+			if inputArgs["params"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["params"]), &params)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg params", err))
+				}
+			}
+			return (*Vault).TestGetSecret(&parent, ctx, host, namespace, username, password, secret, opType, params)
 		default:
 			return nil, fmt.Errorf("unknown function %s", fnName)
 		}
@@ -6871,8 +6893,16 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 							WithArg("username", dag.TypeDef().WithObject("Secret")).
 							WithArg("password", dag.TypeDef().WithObject("Secret")).
 							WithArg("secret", dag.TypeDef().WithKind(StringKind)).
-							WithArg("params", dag.TypeDef().WithKind(StringKind)).
-							WithArg("opType", dag.TypeDef().WithKind(StringKind)))), nil
+							WithArg("opType", dag.TypeDef().WithKind(StringKind).WithOptional(true), FunctionWithArgOpts{DefaultValue: JSON("\"read\"")}).
+							WithArg("params", dag.TypeDef().WithKind(StringKind).WithOptional(true))).
+					WithField("Namespace", dag.TypeDef().WithKind(StringKind)).
+					WithField("Host", dag.TypeDef().WithKind(StringKind)).
+					WithField("Userpass", dag.TypeDef().WithObject("UserpassAuth"))).
+			WithObject(
+				dag.TypeDef().WithObject("UserpassAuth").
+					WithField("Username", dag.TypeDef().WithKind(StringKind)).
+					WithField("Password", dag.TypeDef().WithKind(StringKind)).
+					WithField("Path", dag.TypeDef().WithKind(StringKind))), nil
 	default:
 		return nil, fmt.Errorf("unknown object %s", parentName)
 	}

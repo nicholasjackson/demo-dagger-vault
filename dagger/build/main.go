@@ -157,7 +157,7 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, dockerUs
 }
 
 func (d *Build) FetchDeploymentSecret(ctx context.Context, vaultHost, vaultUsername, vaultPassword string) (string, error) {
-	fmt.Println("Fetch deployment secret from Vault...")
+	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
 
 	js, err := dag.Vault().
 		WithHost(vaultHost).
@@ -175,7 +175,7 @@ func (d *Build) FetchDeploymentSecret(ctx context.Context, vaultHost, vaultUsern
 		return "", err
 	}
 
-	return "", fmt.Errorf("failed to marshal secret: %w", js)
+	return data["service_account_token"].(string), nil
 }
 
 func (d *Build) goCache() *CacheVolume {
