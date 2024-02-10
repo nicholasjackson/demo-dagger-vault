@@ -22,9 +22,15 @@ func (b *Build) All(
 	// +optional
 	vaultPassword *Secret,
 	// +optional
+	vaultNamespace string,
+	// +optional
 	dockerUsername *Secret,
 	// +optional
 	dockerPassword *Secret,
+	// +optional
+	kubeDeployment *File,
+	// +optional
+	kubeHost string,
 ) error {
 	// run the unit tests
 	err := b.UnitTest(ctx, src, false)
@@ -48,13 +54,18 @@ func (b *Build) All(
 		}
 	}
 
-	if vaultHost != "" && vaultUsername != nil && vaultPassword != nil {
+	if vaultHost != "" && vaultUsername != nil && vaultPassword != nil && kubeDeployment != nil && kubeHost != "" {
 		user, _ := vaultUsername.Plaintext(ctx)
 		pass, _ := vaultPassword.Plaintext(ctx)
 
-		_, err = b.FetchDeploymentSecret(ctx, vaultHost, user, pass)
+		secret, err := b.FetchDeploymentSecret(ctx, vaultHost, user, pass, vaultNamespace)
 		if err != nil {
 			return fmt.Errorf("failed to fetch deployment secret:%w", err)
+		}
+
+		err = b.DeployToKubernetes(ctx, secret, kubeHost, kubeDeployment)
+		if err != nil {
+			return fmt.Errorf("failed to deploy to Kubernetes:%w", err)
 		}
 	}
 
@@ -156,11 +167,12 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, dockerUs
 	return nil
 }
 
-func (d *Build) FetchDeploymentSecret(ctx context.Context, vaultHost, vaultUsername, vaultPassword string) (string, error) {
+func (d *Build) FetchDeploymentSecret(ctx context.Context, vaultHost, vaultUsername, vaultPassword, vaultNamespace string) (string, error) {
 	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
 
 	js, err := dag.Vault().
 		WithHost(vaultHost).
+		WithNamespace(vaultNamespace).
 		WithUserpassAuth(vaultUsername, vaultPassword).
 		GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
 
@@ -176,6 +188,23 @@ func (d *Build) FetchDeploymentSecret(ctx context.Context, vaultHost, vaultUsern
 	}
 
 	return data["service_account_token"].(string), nil
+}
+
+func (d *Build) DeployToKubernetes(ctx context.Context, secret, host string, deployment *File) error {
+	fmt.Println("Deploy to Kubernetes...", host)
+
+	_, err := dag.Container().
+		From("bitnami/kubectl").
+		WithFile("/tmp/deployment.yaml", deployment).
+		WithExec([]string{
+			"apply",
+			"-f", "/tmp/deployment.yaml",
+			"--token", secret,
+			"--server", host,
+			"--insecure-skip-tls-verify",
+		}).Sync(ctx)
+
+	return err
 }
 
 func (d *Build) goCache() *CacheVolume {

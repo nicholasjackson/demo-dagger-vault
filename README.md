@@ -6,9 +6,20 @@ To build the application you will need to have the dagger CLI and Docker install
 
 With the environment variables set for the Docker username and password you can run the 
 following command to build the application and push the resulting image to Docker Hub.
+This command will also fetch the secrets from Vault and use them to deploy the 
+application to Kubernetes.
 
 ```bash
-dagger -m ./dagger/build call all --src ./src --docker-username=DOCKER_USERNAME --docker-password=DOCKER_PASSWORD
+dagger -m ./dagger/build call all \
+  --src ./src 
+  --docker-username=DOCKER_USERNAME \
+  --docker-password=DOCKER_PASSWORD \
+  --vault-host=${VAULT_ADDR} \
+  --vault-username=VAULT_USER \
+  --vault-password=VAULT_PASSWORD \
+  --vault-namespace=${VAULT_NAMESPACE} \
+  --kube-host=${KUBE_HOST} \
+  --kube-deployment=./src/kubernetes/deploy.yaml
 ```
 
 ## Authenticate Vault as a user
@@ -171,6 +182,11 @@ kubectl apply -f ./src/kubernetes/deploy.yaml --server="${KUBE_HOST}" --token="$
 ## Configure GitHub Actions to authenticate with Vault
 
 https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-hashicorp-vault
+
+## Deploying the application to Kubernetes using the Dagger build
+
+```shell
+dagger -m ./dagger/build call all --src ./src --docker-username=DOCKER_USERNAME --docker-password=DOCKER_PASSWORD --vault-host=${VAULT_ADDR} --vault-username=VAULT_USER --vault-password=VAULT_PASSWORD --vault-namespace=${VAULT_NAMESPACE} --kube-host=${KUBE_HOST} --kube-deployment=./src/kubernetes/deploy.yaml
 
 ## Todo
 

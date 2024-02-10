@@ -219,6 +219,9 @@ type TypeDefID string
 // The `VaultID` scalar type represents an identifier for an object of type Vault.
 type VaultID string
 
+// The `VaultUserpassAuthID` scalar type represents an identifier for an object of type VaultUserpassAuth.
+type VaultUserpassAuthID string
+
 // The absence of a value.
 //
 // A Null Void is used as a placeholder for resolvers that do not return anything.
@@ -5665,6 +5668,17 @@ func (r *Client) LoadVaultFromID(id VaultID) *Vault {
 	}
 }
 
+// Load a VaultUserpassAuth from its ID.
+func (r *Client) LoadVaultUserpassAuthFromID(id VaultUserpassAuthID) *VaultUserpassAuth {
+	q := r.q.Select("loadVaultUserpassAuthFromID")
+	q = q.Arg("id", id)
+
+	return &VaultUserpassAuth{
+		q: q,
+		c: r.c,
+	}
+}
+
 // Create a new module.
 func (r *Client) Module() *Module {
 	q := r.q.Select("module")
@@ -6479,7 +6493,9 @@ type Vault struct {
 	c graphql.Client
 
 	getSecretJson *string
+	host          *string
 	id            *VaultID
+	namespace     *string
 	testGetSecret *string
 }
 type WithVaultFunc func(r *Vault) *Vault
@@ -6515,6 +6531,18 @@ func (r *Vault) GetSecretJSON(ctx context.Context, secret string, opts ...VaultG
 		}
 	}
 	q = q.Arg("secret", secret)
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+func (r *Vault) Host(ctx context.Context) (string, error) {
+	if r.host != nil {
+		return *r.host, nil
+	}
+	q := r.q.Select("host")
 
 	var response string
 
@@ -6571,27 +6599,63 @@ func (r *Vault) UnmarshalJSON(bs []byte) error {
 	return nil
 }
 
+func (r *Vault) Namespace(ctx context.Context) (string, error) {
+	if r.namespace != nil {
+		return *r.namespace, nil
+	}
+	q := r.q.Select("namespace")
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+// VaultTestGetSecretOpts contains options for Vault.TestGetSecret
+type VaultTestGetSecretOpts struct {
+	OpType string
+
+	Params string
+}
+
 // TestGetSecret is a test function for the GetSecretJSON function
 // example usage: dagger call test-get-secret --host ${VAULT_ADDR} --namespace=${VAULT_NAMESPACE} --username=VAULT_USER --password=VAULT_PASSWORD --secret=kubernetes/hashitalks/creds/deployer-default --params="kubernetes_namespace=default" --op-type=write
-func (r *Vault) TestGetSecret(ctx context.Context, host string, namespace string, username *Secret, password *Secret, secret string, params string, opType string) (string, error) {
+func (r *Vault) TestGetSecret(ctx context.Context, host string, namespace string, username *Secret, password *Secret, secret string, opts ...VaultTestGetSecretOpts) (string, error) {
 	assertNotNil("username", username)
 	assertNotNil("password", password)
 	if r.testGetSecret != nil {
 		return *r.testGetSecret, nil
 	}
 	q := r.q.Select("testGetSecret")
+	for i := len(opts) - 1; i >= 0; i-- {
+		// `opType` optional argument
+		if !querybuilder.IsZeroValue(opts[i].OpType) {
+			q = q.Arg("opType", opts[i].OpType)
+		}
+		// `params` optional argument
+		if !querybuilder.IsZeroValue(opts[i].Params) {
+			q = q.Arg("params", opts[i].Params)
+		}
+	}
 	q = q.Arg("host", host)
 	q = q.Arg("namespace", namespace)
 	q = q.Arg("username", username)
 	q = q.Arg("password", password)
 	q = q.Arg("secret", secret)
-	q = q.Arg("params", params)
-	q = q.Arg("opType", opType)
 
 	var response string
 
 	q = q.Bind(&response)
 	return response, q.Execute(ctx, r.c)
+}
+
+func (r *Vault) Userpass() *VaultUserpassAuth {
+	q := r.q.Select("userpass")
+
+	return &VaultUserpassAuth{
+		q: q,
+		c: r.c,
+	}
 }
 
 // WithHost sets the host for the Vault client
@@ -6637,6 +6701,101 @@ func (r *Vault) WithUserpassAuth(username string, password string, opts ...Vault
 		q: q,
 		c: r.c,
 	}
+}
+
+type VaultUserpassAuth struct {
+	q *querybuilder.Selection
+	c graphql.Client
+
+	id       *VaultUserpassAuthID
+	password *string
+	path     *string
+	username *string
+}
+
+// A unique identifier for this VaultUserpassAuth.
+func (r *VaultUserpassAuth) ID(ctx context.Context) (VaultUserpassAuthID, error) {
+	if r.id != nil {
+		return *r.id, nil
+	}
+	q := r.q.Select("id")
+
+	var response VaultUserpassAuthID
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+// XXX_GraphQLType is an internal function. It returns the native GraphQL type name
+func (r *VaultUserpassAuth) XXX_GraphQLType() string {
+	return "VaultUserpassAuth"
+}
+
+// XXX_GraphQLIDType is an internal function. It returns the native GraphQL type name for the ID of this object
+func (r *VaultUserpassAuth) XXX_GraphQLIDType() string {
+	return "VaultUserpassAuthID"
+}
+
+// XXX_GraphQLID is an internal function. It returns the underlying type ID
+func (r *VaultUserpassAuth) XXX_GraphQLID(ctx context.Context) (string, error) {
+	id, err := r.ID(ctx)
+	if err != nil {
+		return "", err
+	}
+	return string(id), nil
+}
+
+func (r *VaultUserpassAuth) MarshalJSON() ([]byte, error) {
+	id, err := r.ID(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(id)
+}
+func (r *VaultUserpassAuth) UnmarshalJSON(bs []byte) error {
+	var id string
+	err := json.Unmarshal(bs, &id)
+	if err != nil {
+		return err
+	}
+	*r = *dag.LoadVaultUserpassAuthFromID(VaultUserpassAuthID(id))
+	return nil
+}
+
+func (r *VaultUserpassAuth) Password(ctx context.Context) (string, error) {
+	if r.password != nil {
+		return *r.password, nil
+	}
+	q := r.q.Select("password")
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+func (r *VaultUserpassAuth) Path(ctx context.Context) (string, error) {
+	if r.path != nil {
+		return *r.path, nil
+	}
+	q := r.q.Select("path")
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+func (r *VaultUserpassAuth) Username(ctx context.Context) (string, error) {
+	if r.username != nil {
+		return *r.username, nil
+	}
+	q := r.q.Select("username")
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
 }
 
 type CacheSharingMode string
@@ -6913,6 +7072,13 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultPassword", err))
 				}
 			}
+			var vaultNamespace string
+			if inputArgs["vaultNamespace"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["vaultNamespace"]), &vaultNamespace)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultNamespace", err))
+				}
+			}
 			var dockerUsername *Secret
 			if inputArgs["dockerUsername"] != nil {
 				err = json.Unmarshal([]byte(inputArgs["dockerUsername"]), &dockerUsername)
@@ -6927,7 +7093,21 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg dockerPassword", err))
 				}
 			}
-			return nil, (*Build).All(&parent, ctx, src, vaultHost, vaultUsername, vaultPassword, dockerUsername, dockerPassword)
+			var kubeDeployment *File
+			if inputArgs["kubeDeployment"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["kubeDeployment"]), &kubeDeployment)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg kubeDeployment", err))
+				}
+			}
+			var kubeHost string
+			if inputArgs["kubeHost"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["kubeHost"]), &kubeHost)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg kubeHost", err))
+				}
+			}
+			return nil, (*Build).All(&parent, ctx, src, vaultHost, vaultUsername, vaultPassword, vaultNamespace, dockerUsername, dockerPassword, kubeDeployment, kubeHost)
 		case "UnitTest":
 			var parent Build
 			err = json.Unmarshal(parentJSON, &parent)
@@ -7018,7 +7198,42 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultPassword", err))
 				}
 			}
-			return (*Build).FetchDeploymentSecret(&parent, ctx, vaultHost, vaultUsername, vaultPassword)
+			var vaultNamespace string
+			if inputArgs["vaultNamespace"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["vaultNamespace"]), &vaultNamespace)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultNamespace", err))
+				}
+			}
+			return (*Build).FetchDeploymentSecret(&parent, ctx, vaultHost, vaultUsername, vaultPassword, vaultNamespace)
+		case "DeployToKubernetes":
+			var parent Build
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var secret string
+			if inputArgs["secret"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["secret"]), &secret)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg secret", err))
+				}
+			}
+			var host string
+			if inputArgs["host"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["host"]), &host)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg host", err))
+				}
+			}
+			var deployment *File
+			if inputArgs["deployment"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["deployment"]), &deployment)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg deployment", err))
+				}
+			}
+			return nil, (*Build).DeployToKubernetes(&parent, ctx, secret, host, deployment)
 		default:
 			return nil, fmt.Errorf("unknown function %s", fnName)
 		}
@@ -7033,8 +7248,11 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 							WithArg("vaultHost", dag.TypeDef().WithKind(StringKind).WithOptional(true)).
 							WithArg("vaultUsername", dag.TypeDef().WithObject("Secret").WithOptional(true)).
 							WithArg("vaultPassword", dag.TypeDef().WithObject("Secret").WithOptional(true)).
+							WithArg("vaultNamespace", dag.TypeDef().WithKind(StringKind).WithOptional(true)).
 							WithArg("dockerUsername", dag.TypeDef().WithObject("Secret").WithOptional(true)).
-							WithArg("dockerPassword", dag.TypeDef().WithObject("Secret").WithOptional(true))).
+							WithArg("dockerPassword", dag.TypeDef().WithObject("Secret").WithOptional(true)).
+							WithArg("kubeDeployment", dag.TypeDef().WithObject("File").WithOptional(true)).
+							WithArg("kubeHost", dag.TypeDef().WithKind(StringKind).WithOptional(true))).
 					WithFunction(
 						dag.Function("UnitTest",
 							dag.TypeDef().WithKind(VoidKind).WithOptional(true)).
@@ -7055,7 +7273,14 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 							dag.TypeDef().WithKind(StringKind)).
 							WithArg("vaultHost", dag.TypeDef().WithKind(StringKind)).
 							WithArg("vaultUsername", dag.TypeDef().WithKind(StringKind)).
-							WithArg("vaultPassword", dag.TypeDef().WithKind(StringKind)))), nil
+							WithArg("vaultPassword", dag.TypeDef().WithKind(StringKind)).
+							WithArg("vaultNamespace", dag.TypeDef().WithKind(StringKind))).
+					WithFunction(
+						dag.Function("DeployToKubernetes",
+							dag.TypeDef().WithKind(VoidKind).WithOptional(true)).
+							WithArg("secret", dag.TypeDef().WithKind(StringKind)).
+							WithArg("host", dag.TypeDef().WithKind(StringKind)).
+							WithArg("deployment", dag.TypeDef().WithObject("File")))), nil
 	default:
 		return nil, fmt.Errorf("unknown object %s", parentName)
 	}
