@@ -12,6 +12,11 @@ var dockerImage = "nicholasjackson/hashitalks2024:latest"
 type Build struct {
 }
 
+// All runs the unit tests, builds the application, packages it in a container, and pushes it to the registry.
+// It also fetches a secret from Vault and deploys the application to Kubernetes.
+//
+// If the optional parameters for Docker are not provided, the corresponding steps are skipped.
+// If the optional parameters fro Vault and Kubernetes are not provided, the corresponding steps are skipped.
 func (b *Build) All(
 	ctx context.Context,
 	src *Directory,
@@ -44,29 +49,36 @@ func (b *Build) All(
 		return err
 	}
 
-	// package in a container and push to the registry
-	if dockerUsername != nil && dockerPassword != nil {
-		user, _ := dockerUsername.Plaintext(ctx)
-
-		err = b.DockerBuildAndPush(ctx, out, user, dockerPassword)
-		if err != nil {
-			return err
-		}
+	// skip packaging and pushing to the registry if the optional parameters are not provided
+	if dockerUsername == nil || dockerPassword == nil {
+		return nil
 	}
 
-	if vaultHost != "" && vaultUsername != nil && vaultPassword != nil && kubeDeployment != nil && kubeHost != "" {
-		user, _ := vaultUsername.Plaintext(ctx)
-		pass, _ := vaultPassword.Plaintext(ctx)
+	// package in a container and push to the registry
+	user, _ := dockerUsername.Plaintext(ctx)
 
-		secret, err := b.FetchDeploymentSecret(ctx, vaultHost, user, pass, vaultNamespace)
-		if err != nil {
-			return fmt.Errorf("failed to fetch deployment secret:%w", err)
-		}
+	err = b.DockerBuildAndPush(ctx, out, user, dockerPassword)
+	if err != nil {
+		return err
+	}
 
-		err = b.DeployToKubernetes(ctx, secret, kubeHost, kubeDeployment)
-		if err != nil {
-			return fmt.Errorf("failed to deploy to Kubernetes:%w", err)
-		}
+	// skip deployment if the optional parameters are not provided
+	if vaultHost == "" || vaultUsername != nil || vaultPassword != nil || kubeDeployment != nil || kubeHost != "" {
+		return nil
+	}
+
+	// deploy the application
+	user, _ = vaultUsername.Plaintext(ctx)
+	pass, _ := vaultPassword.Plaintext(ctx)
+
+	secret, err := b.FetchDeploymentSecret(ctx, vaultHost, user, pass, vaultNamespace)
+	if err != nil {
+		return fmt.Errorf("failed to fetch deployment secret:%w", err)
+	}
+
+	err = b.DeployToKubernetes(ctx, secret, kubeHost, kubeDeployment)
+	if err != nil {
+		return fmt.Errorf("failed to deploy to Kubernetes:%w", err)
 	}
 
 	return nil
