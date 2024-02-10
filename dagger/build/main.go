@@ -11,7 +11,18 @@ var dockerImage = "nicholasjackson/hashitalks2024:latest"
 type Build struct {
 }
 
-func (b *Build) All(ctx context.Context, src *Directory, vaultUsername, vaultPassword, dockerUsername, dockerPassword Optional[*Secret]) error {
+func (b *Build) All(
+	ctx context.Context,
+	src *Directory,
+	// +optional
+	vaultUsername *Secret,
+	// +optional
+	vaultPassword *Secret,
+	// +optional
+	dockerUsername *Secret,
+	// +optional
+	dockerPassword *Secret,
+) error {
 	// run the unit tests
 	err := b.UnitTest(ctx, src, false)
 	if err != nil {
@@ -25,14 +36,10 @@ func (b *Build) All(ctx context.Context, src *Directory, vaultUsername, vaultPas
 	}
 
 	// package in a container and push to the registry
-	du, duOK := dockerUsername.Get()
-	dp, dpOK := dockerPassword.Get()
+	if dockerUsername != nil && dockerPassword != nil {
+		user, _ := dockerUsername.Plaintext(ctx)
 
-	if duOK && dpOK {
-		user, _ := du.Plaintext(ctx)
-		pass, _ := dp.Plaintext(ctx)
-
-		err = b.DockerBuildAndPush(ctx, out, user, pass)
+		err = b.DockerBuildAndPush(ctx, out, user, dockerPassword)
 		if err != nil {
 			return err
 		}
@@ -97,7 +104,7 @@ func (d *Build) Build(ctx context.Context, src *Directory) (*Directory, error) {
 	return outputs, nil
 }
 
-func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, dockerUsername, dockerPassword string) error {
+func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, dockerUsername string, dockerPassword *Secret) error {
 	fmt.Println("Building Docker image...")
 
 	platormVariants := []*Container{}
@@ -117,11 +124,9 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, dockerUs
 		platormVariants = append(platormVariants, docker)
 	}
 
-	pass := dag.SetSecret("password", dockerPassword)
-
 	// push the images to the registry
 	digest, err := dag.Container().
-		WithRegistryAuth("docker.io", dockerUsername, pass).
+		WithRegistryAuth("docker.io", dockerUsername, dockerPassword).
 		Publish(
 			ctx,
 			dockerImage,

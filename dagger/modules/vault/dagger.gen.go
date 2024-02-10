@@ -6858,7 +6858,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					WithFunction(
 						dag.Function("GetSecretJSON",
 							dag.TypeDef().WithKind(StringKind)).
-							WithDescription("GetSecretJSON returns a vault secert as a JSON string").
+							WithDescription("GetSecretJSON returns a vault secret as a JSON string").
 							WithArg("secret", dag.TypeDef().WithKind(StringKind)).
 							WithArg("params", dag.TypeDef().WithKind(StringKind).WithOptional(true)).
 							WithArg("operationType", dag.TypeDef().WithKind(StringKind).WithOptional(true), FunctionWithArgOpts{DefaultValue: JSON("\"read\"")})).

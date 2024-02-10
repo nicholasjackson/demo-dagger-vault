@@ -53,7 +53,7 @@ func (v *Vault) WithUserpassAuth(
 	return v
 }
 
-// GetSecretJSON returns a vault secert as a JSON string
+// GetSecretJSON returns a vault secret as a JSON string
 func (v *Vault) GetSecretJSON(
 	ctx context.Context,
 	secret string,

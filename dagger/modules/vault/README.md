@@ -32,14 +32,23 @@ The `GetSecretJSON` function is used to get a secret from Vault and return it as
 - `params` (Optional string) - The parameters to use for the secret in Vault, specified as as comma separated key value i.e `ttl=2h,policy=default`.
 - `operationType` (Optional string) - The operation type to use for the secret in Vault, defaults to `read`.
 
+### Returns
+- `string` - The secret from Vault as a json formatted string.
+- `error` - An error if the secret could not be retrieved.
+
 ### Example
 
 ```go
+// get the secret from vault, the secret is returned as a JSON string
 j, err := dag.Vault().
   WithNamespace("my-namespace").
   WithHost("https://vault.example.com").
   WithUserpassAuth(ctx, "my-username", "my-password").
   GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", "kubernetes_namespace=default", "write")
+
+// convert the json string to a map
+var data map[string]interface{}
+err = json.Unmarshal([]byte(j), &data)
 ```
 
 ## Testing

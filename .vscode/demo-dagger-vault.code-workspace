@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../dagger/modules/vault"
+		},
+		{
+			"path": "../src"
+		},
+		{
+			"path": "../dagger/build"
+		}
+	],
+	"settings": {}
+}
