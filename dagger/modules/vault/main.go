@@ -85,13 +85,13 @@ func (v *Vault) GetSecretJSON(
 	switch operationType {
 	case "read":
 		resp, respErr = c.Read(ctx, secret, vault.WithNamespace(v.namespace))
-		if err != nil {
+		if respErr != nil {
 			return "", fmt.Errorf("failed to read secret: %w", respErr)
 		}
 
 	case "write":
 		resp, respErr = c.Write(ctx, secret, body, vault.WithNamespace(v.namespace))
-		if err != nil {
+		if respErr != nil {
 			return "", fmt.Errorf("failed to read secret: %w", respErr)
 		}
 	}

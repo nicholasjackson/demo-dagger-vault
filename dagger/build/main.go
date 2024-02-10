@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 )
 
@@ -14,6 +15,8 @@ type Build struct {
 func (b *Build) All(
 	ctx context.Context,
 	src *Directory,
+	// +optional
+	vaultHost string,
 	// +optional
 	vaultUsername *Secret,
 	// +optional
@@ -42,6 +45,16 @@ func (b *Build) All(
 		err = b.DockerBuildAndPush(ctx, out, user, dockerPassword)
 		if err != nil {
 			return err
+		}
+	}
+
+	if vaultHost != "" && vaultUsername != nil && vaultPassword != nil {
+		user, _ := vaultUsername.Plaintext(ctx)
+		pass, _ := vaultPassword.Plaintext(ctx)
+
+		_, err = b.FetchDeploymentSecret(ctx, vaultHost, user, pass)
+		if err != nil {
+			return fmt.Errorf("failed to fetch deployment secret:%w", err)
 		}
 	}
 
@@ -141,6 +154,28 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, dockerUs
 	fmt.Println("Docker image digest:", digest)
 
 	return nil
+}
+
+func (d *Build) FetchDeploymentSecret(ctx context.Context, vaultHost, vaultUsername, vaultPassword string) (string, error) {
+	fmt.Println("Fetch deployment secret from Vault...")
+
+	js, err := dag.Vault().
+		WithHost(vaultHost).
+		WithUserpassAuth(vaultUsername, vaultPassword).
+		GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
+
+	if err != nil {
+		return "", err
+	}
+
+	// unmarshal the secret into an object
+	data := map[string]interface{}{}
+	err = json.Unmarshal([]byte(js), &data)
+	if err != nil {
+		return "", err
+	}
+
+	return "", fmt.Errorf("failed to marshal secret: %w", js)
 }
 
 func (d *Build) goCache() *CacheVolume {
