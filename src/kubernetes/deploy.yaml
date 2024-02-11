@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nicholasjackson/hashitalks2024:latest
+        image: ##DOCKER_IMAGE##
         ports:
         - containerPort: 8080
 ---

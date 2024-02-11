@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path"
+	"strings"
+	"time"
 )
 
 var arches = []string{"amd64", "arm64"}
-var dockerImage = "nicholasjackson/hashitalks2024:latest"
+var dockerImage = "nicholasjackson/hashitalks2024"
 
 type Build struct {
 }
@@ -54,17 +58,23 @@ func (b *Build) All(
 		return nil
 	}
 
+	// get the latest git sha from the source
+	sha, err := b.getGitSHA(ctx, src)
+	if err != nil {
+		return err
+	}
+
 	// package in a container and push to the registry
 	user, _ := dockerUsername.Plaintext(ctx)
 
-	err = b.DockerBuildAndPush(ctx, out, user, dockerPassword)
+	err = b.DockerBuildAndPush(ctx, out, sha, user, dockerPassword)
 	if err != nil {
 		return err
 	}
 
 	// skip deployment if the optional parameters are not provided
-	if vaultHost == "" || vaultUsername != nil || vaultPassword != nil || kubeDeployment != nil || kubeHost != "" {
-		return nil
+	if vaultHost == "" || vaultUsername == nil || vaultPassword == nil || kubeDeployment == nil || kubeHost == "" {
+		return fmt.Errorf("skipping deployment")
 	}
 
 	// deploy the application
@@ -76,7 +86,7 @@ func (b *Build) All(
 		return fmt.Errorf("failed to fetch deployment secret:%w", err)
 	}
 
-	err = b.DeployToKubernetes(ctx, secret, kubeHost, kubeDeployment)
+	err = b.DeployToKubernetes(ctx, sha, secret, kubeHost, kubeDeployment)
 	if err != nil {
 		return fmt.Errorf("failed to deploy to Kubernetes:%w", err)
 	}
@@ -92,9 +102,9 @@ func (d *Build) UnitTest(ctx context.Context, src *Directory, withRace bool) err
 
 	golang := dag.Container().
 		From("golang:latest").
-		WithDirectory("/src", src).
+		WithDirectory("/files", src).
 		WithMountedCache("/go/pkg/mod", d.goCache()).
-		WithWorkdir("/src").
+		WithWorkdir("/files/src").
 		WithExec([]string{"go", "test", "-v", raceFlag, "./..."})
 
 	_, err := golang.Sync(ctx)
@@ -111,8 +121,8 @@ func (d *Build) Build(ctx context.Context, src *Directory) (*Directory, error) {
 	// get `golang` image
 	golang := dag.Container().
 		From("golang:latest").
-		WithDirectory("/src", src).
-		WithWorkdir("/src").
+		WithDirectory("/files", src).
+		WithWorkdir("/files/src").
 		WithMountedCache("/go/pkg/mod", d.goCache())
 
 	for _, goarch := range arches {
@@ -140,7 +150,7 @@ func (d *Build) Build(ctx context.Context, src *Directory) (*Directory, error) {
 	return outputs, nil
 }
 
-func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, dockerUsername string, dockerPassword *Secret) error {
+func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha string, dockerUsername string, dockerPassword *Secret) error {
 	fmt.Println("Building Docker image...")
 
 	platormVariants := []*Container{}
@@ -165,7 +175,7 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, dockerUs
 		WithRegistryAuth("docker.io", dockerUsername, dockerPassword).
 		Publish(
 			ctx,
-			dockerImage,
+			fmt.Sprintf("%s:%s", dockerImage, sha),
 			ContainerPublishOpts{
 				PlatformVariants: platormVariants,
 			})
@@ -202,23 +212,56 @@ func (d *Build) FetchDeploymentSecret(ctx context.Context, vaultHost, vaultUsern
 	return data["service_account_token"].(string), nil
 }
 
-func (d *Build) DeployToKubernetes(ctx context.Context, secret, host string, deployment *File) error {
-	fmt.Println("Deploy to Kubernetes...", host)
+func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host string, deployment *File) error {
+	fmt.Println("Deploy to Kubernetes...", host, sha)
 
-	_, err := dag.Container().
+	// first replace the image tag in the deployment file
+	dir := os.TempDir()
+	defer os.RemoveAll(dir)
+
+	deployment.Export(ctx, path.Join(dir, "deployment.yaml"))
+	dStr, err := os.ReadFile(path.Join(dir, "deployment.yaml"))
+	if err != nil {
+		return err
+	}
+
+	// replace the image and write the new deployment file
+	newDep := strings.ReplaceAll(string(dStr), "##DOCKER_IMAGE##", fmt.Sprintf("%s:%s", dockerImage, sha))
+	df := dag.Directory().WithNewFile("deployment.yaml", newDep)
+
+	out, err := dag.Container().
 		From("bitnami/kubectl").
-		WithFile("/tmp/deployment.yaml", deployment).
+		WithDirectory("/files", df).
+		WithEnvVariable("CACHE_INVALIDATE", time.Now().String()).
 		WithExec([]string{
 			"apply",
-			"-f", "/tmp/deployment.yaml",
+			"-f", "/files/deployment.yaml",
 			"--token", secret,
 			"--server", host,
 			"--insecure-skip-tls-verify",
-		}).Sync(ctx)
+		}).Stdout(ctx)
 
-	return err
+	fmt.Println("Kubectl output:", out)
+
+	return fmt.Errorf("failed to deploy to Kubernetes", newDep)
 }
 
 func (d *Build) goCache() *CacheVolume {
 	return dag.CacheVolume("go-cache")
+}
+
+func (d *Build) getGitSHA(ctx context.Context, src *Directory) (string, error) {
+	// get the latest git sha from the source
+	ref, err := dag.Container().
+		From("alpine/git").
+		WithDirectory("/src", src).
+		WithWorkdir("/src").
+		WithExec([]string{"rev-parse", "HEAD"}).
+		Stdout(ctx)
+
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(ref), nil
 }

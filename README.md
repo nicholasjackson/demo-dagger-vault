@@ -148,7 +148,7 @@ We can now create further roles for admin
 ```bash
 vault write kubernetes/hashitalks/roles/admin \
   allowed_kubernetes_namespaces="*" \
-  generated_role_rules="'rules': [{'apiGroups': [''], 'resources': ['*'], 'verbs': ['*']}]"
+  generated_role_rules="'rules': [{'apiGroups': [''], 'resources': ['*'], 'verbs': ['*']},{'apiGroups': ['apps'], 'resources': ['*'], 'verbs': ['*']}]"
 ```
 
 Example: Create an admin token for the default namespace.
