@@ -7275,7 +7275,14 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultAddr", err))
 				}
 			}
-			return (*Build).TestGetToken(&parent, ctx, actionsRequestToken, actionsTokenUrl, vaultAddr)
+			var vaultNamespace string
+			if inputArgs["vaultNamespace"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["vaultNamespace"]), &vaultNamespace)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultNamespace", err))
+				}
+			}
+			return (*Build).TestGetToken(&parent, ctx, actionsRequestToken, actionsTokenUrl, vaultAddr, vaultNamespace)
 		case "UnitTest":
 			var parent Build
 			err = json.Unmarshal(parentJSON, &parent)
@@ -7441,7 +7448,8 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 							dag.TypeDef().WithKind(StringKind)).
 							WithArg("actionsRequestToken", dag.TypeDef().WithObject("Secret")).
 							WithArg("actionsTokenURL", dag.TypeDef().WithKind(StringKind)).
-							WithArg("vaultAddr", dag.TypeDef().WithKind(StringKind))).
+							WithArg("vaultAddr", dag.TypeDef().WithKind(StringKind)).
+							WithArg("vaultNamespace", dag.TypeDef().WithKind(StringKind))).
 					WithFunction(
 						dag.Function("UnitTest",
 							dag.TypeDef().WithKind(VoidKind).WithOptional(true)).

@@ -17,5 +17,5 @@ jobs:
         with:
           verb: call 
           module: ./dagger/build
-          args: test-get-token --actions-request-token=ACTIONS_ID_TOKEN_REQUEST_TOKEN --actions-token-url=${ACTIONS_ID_TOKEN_REQUEST_URL} --vault-addr="https://vault-cluster-public-vault-0bbbdae6.9eb86982.z1.hashicorp.cloud:8200/"
+          args: test-get-token --actions-request-token=ACTIONS_ID_TOKEN_REQUEST_TOKEN --actions-token-url=${ACTIONS_ID_TOKEN_REQUEST_URL} --vault-namespace=/admin/dev --vault-addr="https://vault-cluster-public-vault-0bbbdae6.9eb86982.z1.hashicorp.cloud:8200/"
           version: "0.9.9"

@@ -96,7 +96,7 @@ func (b *Build) All(
 	return nil
 }
 
-func (d *Build) TestGetToken(ctx context.Context, actionsRequestToken *Secret, actionsTokenURL string, vaultAddr string) (string, error) {
+func (d *Build) TestGetToken(ctx context.Context, actionsRequestToken *Secret, actionsTokenURL string, vaultAddr, vaultNamespace string) (string, error) {
 	rq, err := http.NewRequest(http.MethodGet, actionsTokenURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("unable to create request: %w", err)
@@ -137,8 +137,9 @@ func (d *Build) TestGetToken(ctx context.Context, actionsRequestToken *Secret, a
 	// authenticate with Vault and retrieve a K8s token
 	_, err = dag.Vault().
 		WithHost(vaultAddr).
+		WithNamespace(vaultNamespace).
 		WithJwtauth(gitHubJWT, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"}).
-		GetSecretJSON(ctx, "kubernetes/hashitalks/roles/deployer-default")
+		GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
 
 	return "ok", err
 	//return string(body), nil
