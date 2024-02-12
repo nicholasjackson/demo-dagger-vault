@@ -7116,14 +7116,6 @@ func (r *Build) UnmarshalJSON(bs []byte) error {
 	}
 	return nil
 }
-func (r *VaultSecrets) UnmarshalJSON(bs []byte) error {
-	var concrete struct{}
-	err := json.Unmarshal(bs, &concrete)
-	if err != nil {
-		return err
-	}
-	return nil
-}
 
 func main() {
 	ctx := context.Background()
@@ -7347,76 +7339,6 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				}
 			}
 			return nil, (*Build).DeployToKubernetes(&parent, ctx, sha, secret, host, deployment)
-		case "FetchDeploymentSecretUserpass":
-			var parent Build
-			err = json.Unmarshal(parentJSON, &parent)
-			if err != nil {
-				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
-			}
-			var vaultHost string
-			if inputArgs["vaultHost"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["vaultHost"]), &vaultHost)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultHost", err))
-				}
-			}
-			var vaultUsername string
-			if inputArgs["vaultUsername"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["vaultUsername"]), &vaultUsername)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultUsername", err))
-				}
-			}
-			var vaultPassword string
-			if inputArgs["vaultPassword"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["vaultPassword"]), &vaultPassword)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultPassword", err))
-				}
-			}
-			var vaultNamespace string
-			if inputArgs["vaultNamespace"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["vaultNamespace"]), &vaultNamespace)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultNamespace", err))
-				}
-			}
-			return (*Build).FetchDeploymentSecretUserpass(&parent, ctx, vaultHost, vaultUsername, vaultPassword, vaultNamespace)
-		case "FetchDeploymentSecretOIDC":
-			var parent Build
-			err = json.Unmarshal(parentJSON, &parent)
-			if err != nil {
-				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
-			}
-			var actionsRequestToken string
-			if inputArgs["actionsRequestToken"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["actionsRequestToken"]), &actionsRequestToken)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg actionsRequestToken", err))
-				}
-			}
-			var actionsTokenUrl string
-			if inputArgs["actionsTokenURL"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["actionsTokenURL"]), &actionsTokenUrl)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg actionsTokenURL", err))
-				}
-			}
-			var vaultHost string
-			if inputArgs["vaultHost"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["vaultHost"]), &vaultHost)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultHost", err))
-				}
-			}
-			var vaultNamespace string
-			if inputArgs["vaultNamespace"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["vaultNamespace"]), &vaultNamespace)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultNamespace", err))
-				}
-			}
-			return (*Build).FetchDeploymentSecretOIDC(&parent, ctx, actionsRequestToken, actionsTokenUrl, vaultHost, vaultNamespace)
 		default:
 			return nil, fmt.Errorf("unknown function %s", fnName)
 		}
@@ -7457,23 +7379,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 							WithArg("sha", dag.TypeDef().WithKind(StringKind)).
 							WithArg("secret", dag.TypeDef().WithKind(StringKind)).
 							WithArg("host", dag.TypeDef().WithKind(StringKind)).
-							WithArg("deployment", dag.TypeDef().WithObject("File"))).
-					WithFunction(
-						dag.Function("FetchDeploymentSecretUserpass",
-							dag.TypeDef().WithObject("VaultSecrets")).
-							WithArg("vaultHost", dag.TypeDef().WithKind(StringKind)).
-							WithArg("vaultUsername", dag.TypeDef().WithKind(StringKind)).
-							WithArg("vaultPassword", dag.TypeDef().WithKind(StringKind)).
-							WithArg("vaultNamespace", dag.TypeDef().WithKind(StringKind))).
-					WithFunction(
-						dag.Function("FetchDeploymentSecretOIDC",
-							dag.TypeDef().WithObject("VaultSecrets")).
-							WithArg("actionsRequestToken", dag.TypeDef().WithKind(StringKind)).
-							WithArg("actionsTokenURL", dag.TypeDef().WithKind(StringKind)).
-							WithArg("vaultHost", dag.TypeDef().WithKind(StringKind)).
-							WithArg("vaultNamespace", dag.TypeDef().WithKind(StringKind)))).
-			WithObject(
-				dag.TypeDef().WithObject("VaultSecrets")), nil
+							WithArg("deployment", dag.TypeDef().WithObject("File")))), nil
 	default:
 		return nil, fmt.Errorf("unknown object %s", parentName)
 	}

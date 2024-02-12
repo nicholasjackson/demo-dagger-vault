@@ -11,7 +11,7 @@ application to Kubernetes.
 
 ```bash
 dagger -m ./dagger/build call all \
-  --src ./src \
+  --src . \
   --vault-addr=${VAULT_ADDR} \
   --vault-username=VAULT_USER \
   --vault-password=VAULT_PASSWORD \

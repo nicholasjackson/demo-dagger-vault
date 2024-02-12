@@ -75,7 +75,7 @@ func (b *Build) All(
 		user, _ := vaultUsername.Plaintext(ctx)
 		pass, _ := vaultPassword.Plaintext(ctx)
 
-		secrets, err = b.FetchDeploymentSecretUserpass(ctx, vaultAddr, user, pass, vaultNamespace)
+		secrets, err = b.fetchDeploymentSecretUserpass(ctx, vaultAddr, user, pass, vaultNamespace)
 		if err != nil {
 			return fmt.Errorf("failed to fetch deployment secret:%w", err)
 		}
@@ -84,7 +84,7 @@ func (b *Build) All(
 	if actionsRequestToken != nil && actionsTokenURL != "" {
 		token, _ := actionsRequestToken.Plaintext(ctx)
 
-		secrets, err = b.FetchDeploymentSecretOIDC(ctx, vaultAddr, token, actionsTokenURL, vaultNamespace)
+		secrets, err = b.fetchDeploymentSecretOIDC(ctx, vaultAddr, vaultNamespace, token, actionsTokenURL)
 		if err != nil {
 			return fmt.Errorf("failed to fetch deployment secret:%w", err)
 		}
@@ -234,14 +234,15 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host
 	return fmt.Errorf("failed to deploy to Kubernetes:\n %s", newDep)
 }
 
-func (d *Build) FetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername, vaultPassword, vaultNamespace string) (VaultSecrets, error) {
+func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername, vaultPassword, vaultNamespace string) (VaultSecrets, error) {
 	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
 
-	js, err := dag.Vault().
+	vc := dag.Vault().
 		WithHost(vaultHost).
 		WithNamespace(vaultNamespace).
-		WithUserpassAuth(vaultUsername, vaultPassword).
-		GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
+		WithUserpassAuth(vaultUsername, vaultPassword)
+
+	js, err := vc.GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
 
 	if err != nil {
 		return VaultSecrets{}, err
@@ -260,11 +261,7 @@ func (d *Build) FetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 
 	// fetch the static secrets from Vault
 	fmt.Println("Fetch static secret from Vault...", vaultHost)
-	js, err = dag.Vault().
-		WithHost(vaultHost).
-		WithNamespace(vaultNamespace).
-		WithUserpassAuth(vaultUsername, vaultPassword).
-		GetSecretJSON(ctx, "secrets/data/hashitalks/deployment")
+	js, err = vc.GetSecretJSON(ctx, "secrets/data/hashitalks/deployment")
 
 	if err != nil {
 		return VaultSecrets{}, err
@@ -283,7 +280,7 @@ func (d *Build) FetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 	return secrets, nil
 }
 
-func (d *Build) FetchDeploymentSecretOIDC(ctx context.Context, actionsRequestToken, actionsTokenURL, vaultHost, vaultNamespace string) (VaultSecrets, error) {
+func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultNamespace, actionsRequestToken, actionsTokenURL string) (VaultSecrets, error) {
 	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
 
 	rq, err := http.NewRequest(http.MethodGet, actionsTokenURL, nil)
@@ -316,11 +313,12 @@ func (d *Build) FetchDeploymentSecretOIDC(ctx context.Context, actionsRequestTok
 	json.Unmarshal(body, &data)
 	gitHubJWT := data["value"].(string)
 
-	js, err := dag.Vault().
+	vc := dag.Vault().
 		WithHost(vaultHost).
 		WithNamespace(vaultNamespace).
-		WithJwtauth(gitHubJWT, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"}).
-		GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
+		WithJwtauth(gitHubJWT, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"})
+
+	js, err := vc.GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
 
 	if err != nil {
 		return VaultSecrets{}, err
@@ -338,11 +336,7 @@ func (d *Build) FetchDeploymentSecretOIDC(ctx context.Context, actionsRequestTok
 
 	// fetch the static secrets from Vault
 	fmt.Println("Fetch static secret from Vault...", vaultHost)
-	js, err = dag.Vault().
-		WithHost(vaultHost).
-		WithNamespace(vaultNamespace).
-		WithJwtauth(gitHubJWT, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"}).
-		GetSecretJSON(ctx, "secrets/data/hashitalks/deployment")
+	js, err = vc.GetSecretJSON(ctx, "secrets/data/hashitalks/deployment")
 
 	if err != nil {
 		return VaultSecrets{}, err
