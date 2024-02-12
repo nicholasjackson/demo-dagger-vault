@@ -68,8 +68,6 @@ func (b *Build) All(
 		return err
 	}
 
-	// fetch the static secrets from Vault
-
 	var secrets VaultSecrets
 
 	if vaultUsername != nil && vaultPassword != nil {
@@ -77,7 +75,7 @@ func (b *Build) All(
 		user, _ := vaultUsername.Plaintext(ctx)
 		pass, _ := vaultPassword.Plaintext(ctx)
 
-		secrets, err = b.fetchDeploymentSecretUserpass(ctx, vaultAddr, user, pass, vaultNamespace)
+		secrets, err = b.FetchDeploymentSecretUserpass(ctx, vaultAddr, user, pass, vaultNamespace)
 		if err != nil {
 			return fmt.Errorf("failed to fetch deployment secret:%w", err)
 		}
@@ -86,7 +84,7 @@ func (b *Build) All(
 	if actionsRequestToken != nil && actionsTokenURL != "" {
 		token, _ := actionsRequestToken.Plaintext(ctx)
 
-		secrets, err = b.fetchDeploymentSecretOIDC(ctx, vaultAddr, token, actionsTokenURL, vaultNamespace)
+		secrets, err = b.FetchDeploymentSecretOIDC(ctx, vaultAddr, token, actionsTokenURL, vaultNamespace)
 		if err != nil {
 			return fmt.Errorf("failed to fetch deployment secret:%w", err)
 		}
@@ -236,7 +234,7 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host
 	return fmt.Errorf("failed to deploy to Kubernetes:\n %s", newDep)
 }
 
-func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername, vaultPassword, vaultNamespace string) (VaultSecrets, error) {
+func (d *Build) FetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername, vaultPassword, vaultNamespace string) (VaultSecrets, error) {
 	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
 
 	js, err := dag.Vault().
@@ -285,7 +283,7 @@ func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 	return secrets, nil
 }
 
-func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, actionsRequestToken, actionsTokenURL, vaultHost, vaultNamespace string) (VaultSecrets, error) {
+func (d *Build) FetchDeploymentSecretOIDC(ctx context.Context, actionsRequestToken, actionsTokenURL, vaultHost, vaultNamespace string) (VaultSecrets, error) {
 	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
 
 	rq, err := http.NewRequest(http.MethodGet, actionsTokenURL, nil)
