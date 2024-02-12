@@ -17,11 +17,18 @@ type UserpassAuth struct {
 	Path     string
 }
 
+type JWTAuth struct {
+	Token string
+	Role  string
+	Path  string
+}
+
 type Vault struct {
 	Namespace string
 	Host      string
 
 	Userpass *UserpassAuth
+	JWT      *JWTAuth
 }
 
 // WithNamespace sets the namespace for the Vault client
@@ -48,6 +55,23 @@ func (v *Vault) WithUserpassAuth(
 		Username: username,
 		Password: password,
 		Path:     path,
+	}
+
+	return v
+}
+
+func (v *Vault) WithJWTAuth(
+	ctx context.Context,
+	token string,
+	role string,
+	// +optional
+	// +default=jwt
+	path string,
+) *Vault {
+	v.JWT = &JWTAuth{
+		Token: token,
+		Role:  role,
+		Path:  path,
 	}
 
 	return v
@@ -152,12 +176,22 @@ func (v *Vault) getClient(ctx context.Context) (*vault.Client, error) {
 	}
 
 	if v.Userpass != nil {
-		vr, err := client.Auth.UserpassLogin(ctx, v.Userpass.Username, schema.UserpassLoginRequest{Password: v.Userpass.Password}, vault.WithNamespace(v.Namespace))
+		vr, err := client.Auth.UserpassLogin(ctx, v.Userpass.Username, schema.UserpassLoginRequest{Password: v.Userpass.Password}, vault.WithNamespace(v.Namespace), vault.WithMountPath(v.Userpass.Path))
 		if err != nil {
 			return nil, fmt.Errorf("failed to login: %w", err)
 		}
 
 		log.Debug("Logged in as", "user", v.Userpass.Username)
+		client.SetToken(vr.Auth.ClientToken)
+	}
+
+	if v.JWT != nil {
+		vr, err := client.Auth.JwtLogin(ctx, schema.JwtLoginRequest{Jwt: v.JWT.Path, Role: v.JWT.Role}, vault.WithNamespace(v.Namespace), vault.WithMountPath(v.JWT.Path))
+		if err != nil {
+			return nil, fmt.Errorf("failed to login: %w", err)
+		}
+
+		log.Debug("Logged in as", "role", v.JWT.Role)
 		client.SetToken(vr.Auth.ClientToken)
 	}
 

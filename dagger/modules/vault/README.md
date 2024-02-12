@@ -15,6 +15,7 @@ The `WithHost` function is used to set the host for the Vault secrets.
 ### Parameters
 - `host` (string) - The host to use for the Vault secrets.
 
+
 ## WithUserpassAuth
 The `WithUserpassAuth` function is used to set details for authnticating with Vault using
 userpass.
@@ -22,7 +23,18 @@ userpass.
 ### Parameters
 - `username` (string) - The username to use for the Vault secrets.
 - `password` (string) - The password to use for the Vault secrets.
-- `path` (Optional string) - The path to use for the Vault secrets, defaults to `userpass`.
+- `path` (Optional string) - The path to use for the auth mount, defaults to `userpass`.
+
+
+## WithJWTAuth
+The `WithJWTAuth` function is used to set the details for authenticating with Vault using
+JWT tokens.
+
+### Parameters
+- `token` (string) - The JWT token to use or authentication.
+- `role` (string) - The Vault role to use. 
+- `path` (Optional string) - The path to use for the auth mount, defaults to `jwt`.
+
 
 ## GetSecretJSON
 The `GetSecretJSON` function is used to get a secret from Vault and return it as a json formatted string.
@@ -50,6 +62,7 @@ j, err := dag.Vault().
 var data map[string]interface{}
 err = json.Unmarshal([]byte(j), &data)
 ```
+
 
 ## Testing
 
