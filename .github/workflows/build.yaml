@@ -9,6 +9,9 @@ jobs:
       id-token: write
       contents: read
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Fetch OIDC Token
         uses: dagger/dagger-for-github@v5
         with:
