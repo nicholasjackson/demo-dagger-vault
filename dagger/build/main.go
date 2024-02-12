@@ -47,6 +47,9 @@ func (b *Build) All(
 		return fmt.Errorf("vault address is required")
 	}
 
+	fmt.Println("Vault Address:", vaultAddr)
+	fmt.Println("Vault Namespace:", vaultNamespace)
+
 	// run the unit tests
 	err := b.UnitTest(ctx, src, false)
 	if err != nil {
