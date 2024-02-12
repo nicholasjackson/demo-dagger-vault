@@ -47,9 +47,6 @@ func (b *Build) All(
 		return fmt.Errorf("vault address is required")
 	}
 
-	fmt.Println("Vault Address:", vaultAddr)
-	fmt.Println("Vault Namespace:", vaultNamespace)
-
 	// run the unit tests
 	err := b.UnitTest(ctx, src, false)
 	if err != nil {
@@ -231,7 +228,7 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host
 
 	fmt.Println("Kubectl output:", out)
 
-	return fmt.Errorf("failed to deploy to Kubernetes:\n %s", newDep)
+	return nil
 }
 
 func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername, vaultPassword, vaultNamespace string) (VaultSecrets, error) {

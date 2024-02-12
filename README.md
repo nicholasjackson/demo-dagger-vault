@@ -208,7 +208,7 @@ path "kubernetes/hashitalks/creds/deployer-default" {
   capabilities = [ "create", "update" ]
 }
 
-path "secrets/hashitalks/deployment" {
+path "secrets/data/hashitalks/deployment" {
   capabilities = [ "read" ]
 }
 EOF
