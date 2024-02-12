@@ -132,7 +132,7 @@ func (d *Build) TestGetToken(ctx context.Context, actionsRequestToken *Secret, a
 	// authenticate with Vault and retrieve a K8s token
 	_, err = dag.Vault().
 		WithHost(vaultAddr).
-		WithJwtauth(gitHubJWT, "hashitalks-deployer").
+		WithJwtauth(gitHubJWT, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"}).
 		GetSecretJSON(ctx, "kubernetes/hashitalks/roles/deployer-default")
 
 	return "ok", err

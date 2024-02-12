@@ -193,7 +193,7 @@ vault auth enable --path=jwt/github jwt
 Then configure the endpoint to be able to validate GitHub tokens
 
 ```shell
-vault write auth/jwt/config \
+vault write auth/jwt/github/config \
   bound_issuer="https://token.actions.githubusercontent.com" \
   oidc_discovery_url="https://token.actions.githubusercontent.com"
 ```
@@ -203,15 +203,16 @@ Next you need to create a policy that will enable the authenticated user to acce
 ```shell
 vault policy write kubernnetes-deployer - <<EOF
 path "kubernetes/hashitalks/roles/deployer-default" {
-  capabilities = [ "write" ]
+  capabilities = [ "create" ]
 }
+EOF
 ```
 
 Finally create a roll that bind the presented token to the policy, note the `repository` in the 
 bound claims. This claim is automatically added by the GitHub OIDC service.
 
 ```shell
-vault write auth/jwt/role/hashitalks-deployer -<<EOF
+vault write auth/jwt/github/role/hashitalks-deployer -<<EOF
 {
   "role_type": "jwt",
   "user_claim": "actor",
