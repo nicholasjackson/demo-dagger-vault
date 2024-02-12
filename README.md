@@ -183,10 +183,46 @@ kubectl apply -f ./src/kubernetes/deploy.yaml --server="${KUBE_HOST}" --token="$
 
 https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-hashicorp-vault
 
-## Deploying the application to Kubernetes using the Dagger build
+
+First enable the JWT endpoint
 
 ```shell
-dagger -m ./dagger/build call all --src ./src --docker-username=DOCKER_USERNAME --docker-password=DOCKER_PASSWORD --vault-host=${VAULT_ADDR} --vault-username=VAULT_USER --vault-password=VAULT_PASSWORD --vault-namespace=${VAULT_NAMESPACE} --kube-host=${KUBE_HOST} --kube-deployment=./src/kubernetes/deploy.yaml
+vault auth enable --path=jwt/github jwt
+```
+
+Then configure the endpoint to be able to validate GitHub tokens
+
+```shell
+vault write auth/jwt/config \
+  bound_issuer="https://token.actions.githubusercontent.com" \
+  oidc_discovery_url="https://token.actions.githubusercontent.com"
+```
+
+Next you need to create a policy that will enable the authenticated user to access the deployer role
+
+```shell
+vault policy write kubernnetes-deployer - <<EOF
+path "kubernetes/hashitalks/roles/deployer-default" {
+  capabilities = [ "write" ]
+}
+```
+
+Finally create a roll that bind the presented token to the policy, note the `repository` in the 
+bound claims. This claim is automatically added by the GitHub OIDC service.
+
+```shell
+vault write auth/jwt/role/hashitalks-deployer -<<EOF
+{
+  "role_type": "jwt",
+  "user_claim": "actor",
+  "bound_claims": {
+    "repository": "nicholasjackson/demo-dagger-vault"
+  },
+  "policies": ["deployer-default"],
+  "ttl": "10m"
+}
+EOF
+```
 
 ## Todo
 
@@ -195,8 +231,8 @@ dagger -m ./dagger/build call all --src ./src --docker-username=DOCKER_USERNAME 
 - [x] Configure Kubernetes secrets engine in Vault
 - [x] Create Roles to access Kubernetes
 - [x] Create a Simple module to access Vault Secrets from Dagger
-- [ ] Create a Dagger config to build an application and deploy to Kubernetes
+- [x] Create a Dagger config to build an application and deploy to Kubernetes
 - [ ] Configure OIDC Auth in Vault to enable GitHub Actions to login
 - [ ] Add a GitHub Action to run Dagger
-- [ ] Add a CircleCI config to run Dagger
 - [ ] Configure OIDC Auth in Vault to enable CircleCI to login
+- [ ] Add a CircleCI config to run Dagger
