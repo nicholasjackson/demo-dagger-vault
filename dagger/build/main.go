@@ -6,14 +6,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path"
 	"strings"
 	"time"
 )
 
 var arches = []string{"amd64", "arm64"}
 var dockerImage = "nicholasjackson/hashitalks2024"
+
+type VaultSecrets struct {
+	k8sAccessToken string
+	k8sAddr        string
+	dockerUsername string
+	dockerPassword string
+}
 
 type Build struct {
 }
@@ -27,21 +32,17 @@ func (b *Build) All(
 	ctx context.Context,
 	src *Directory,
 	// +optional
-	vaultHost string,
+	vaultAddr string,
+	// +optional
+	vaultNamespace string,
 	// +optional
 	vaultUsername *Secret,
 	// +optional
 	vaultPassword *Secret,
 	// +optional
-	vaultNamespace string,
+	actionsRequestToken *Secret,
 	// +optional
-	dockerUsername *Secret,
-	// +optional
-	dockerPassword *Secret,
-	// +optional
-	kubeDeployment *File,
-	// +optional
-	kubeHost string,
+	actionsTokenURL string,
 ) error {
 	// run the unit tests
 	err := b.UnitTest(ctx, src, false)
@@ -55,88 +56,48 @@ func (b *Build) All(
 		return err
 	}
 
-	// skip packaging and pushing to the registry if the optional parameters are not provided
-	if dockerUsername == nil || dockerPassword == nil {
-		return nil
-	}
-
 	// get the latest git sha from the source
 	sha, err := b.getGitSHA(ctx, src)
 	if err != nil {
 		return err
 	}
 
-	// package in a container and push to the registry
-	user, _ := dockerUsername.Plaintext(ctx)
+	// fetch the static secrets from Vault
 
-	err = b.DockerBuildAndPush(ctx, out, sha, user, dockerPassword)
+	var secrets VaultSecrets
+
+	if vaultUsername != nil && vaultPassword != nil {
+		// deploy the application
+		user, _ := vaultUsername.Plaintext(ctx)
+		pass, _ := vaultPassword.Plaintext(ctx)
+
+		secrets, err = b.fetchDeploymentSecretUserpass(ctx, vaultAddr, user, pass, vaultNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to fetch deployment secret:%w", err)
+		}
+	}
+
+	if actionsRequestToken != nil && actionsTokenURL != "" {
+		token, _ := actionsRequestToken.Plaintext(ctx)
+
+		secrets, err = b.fetchDeploymentSecretOIDC(ctx, vaultAddr, token, actionsTokenURL, vaultNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to fetch deployment secret:%w", err)
+		}
+	}
+
+	err = b.DockerBuildAndPush(ctx, out, sha, secrets.dockerUsername, secrets.dockerPassword)
 	if err != nil {
 		return err
 	}
 
-	// skip deployment if the optional parameters are not provided
-	if vaultHost == "" || vaultUsername == nil || vaultPassword == nil || kubeDeployment == nil || kubeHost == "" {
-		return fmt.Errorf("skipping deployment")
-	}
-
-	// deploy the application
-	user, _ = vaultUsername.Plaintext(ctx)
-	pass, _ := vaultPassword.Plaintext(ctx)
-
-	secret, err := b.FetchDeploymentSecret(ctx, vaultHost, user, pass, vaultNamespace)
-	if err != nil {
-		return fmt.Errorf("failed to fetch deployment secret:%w", err)
-	}
-
-	err = b.DeployToKubernetes(ctx, sha, secret, kubeHost, kubeDeployment)
+	dep := src.File("/src/kubernetes/deploy.yaml")
+	err = b.DeployToKubernetes(ctx, sha, secrets.k8sAccessToken, secrets.k8sAddr, dep)
 	if err != nil {
 		return fmt.Errorf("failed to deploy to Kubernetes:%w", err)
 	}
 
 	return nil
-}
-
-func (d *Build) TestGetToken(ctx context.Context, actionsRequestToken *Secret, actionsTokenURL string, vaultAddr, vaultNamespace string) (string, error) {
-	rq, err := http.NewRequest(http.MethodGet, actionsTokenURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("unable to create request: %w", err)
-	}
-
-	// add the bearer token for the request
-	token, _ := actionsRequestToken.Plaintext(ctx)
-	rq.Header.Add("Authorization", fmt.Sprintf("bearer %s", token))
-
-	// make the request
-	resp, err := http.DefaultClient.Do(rq)
-	if err != nil {
-		return "", fmt.Errorf("unable to request token: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
-
-	// parse the response
-	data := map[string]interface{}{}
-
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("unable to read response body: %w", err)
-	}
-
-	json.Unmarshal(body, &data)
-	gitHubJWT := data["value"].(string)
-
-	// authenticate with Vault and retrieve a K8s token
-	_, err = dag.Vault().
-		WithHost(vaultAddr).
-		WithNamespace(vaultNamespace).
-		WithJwtauth(gitHubJWT, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"}).
-		GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
-
-	return "ok", err
-	//return string(body), nil
 }
 
 func (d *Build) UnitTest(ctx context.Context, src *Directory, withRace bool) error {
@@ -195,7 +156,7 @@ func (d *Build) Build(ctx context.Context, src *Directory) (*Directory, error) {
 	return outputs, nil
 }
 
-func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha string, dockerUsername string, dockerPassword *Secret) error {
+func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha string, dockerUsername, dockerPassword string) error {
 	fmt.Println("Building Docker image...")
 
 	platormVariants := []*Container{}
@@ -215,9 +176,11 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha stri
 		platormVariants = append(platormVariants, docker)
 	}
 
+	secret := dag.SetSecret("dockerpassword", dockerPassword)
+
 	// push the images to the registry
 	digest, err := dag.Container().
-		WithRegistryAuth("docker.io", dockerUsername, dockerPassword).
+		WithRegistryAuth("docker.io", dockerUsername, secret).
 		Publish(
 			ctx,
 			fmt.Sprintf("%s:%s", dockerImage, sha),
@@ -234,48 +197,18 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha stri
 	return nil
 }
 
-func (d *Build) FetchDeploymentSecret(ctx context.Context, vaultHost, vaultUsername, vaultPassword, vaultNamespace string) (string, error) {
-	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
-
-	js, err := dag.Vault().
-		WithHost(vaultHost).
-		WithNamespace(vaultNamespace).
-		WithUserpassAuth(vaultUsername, vaultPassword).
-		GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
-
-	if err != nil {
-		return "", err
-	}
-
-	// unmarshal the secret into an object
-	data := map[string]interface{}{}
-	err = json.Unmarshal([]byte(js), &data)
-	if err != nil {
-		return "", err
-	}
-
-	return data["service_account_token"].(string), nil
-}
-
 func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host string, deployment *File) error {
 	fmt.Println("Deploy to Kubernetes...", host, sha)
 
-	// first replace the image tag in the deployment file
-	dir, err := os.CreateTemp("", "")
-	if err != nil {
-		return fmt.Errorf("unable to create temp directory: %w", err)
-	}
-	defer os.RemoveAll(dir.Name())
-
-	deployment.Export(ctx, path.Join(dir.Name(), "deployment.yaml"))
-	dStr, err := os.ReadFile(path.Join(dir.Name(), "deployment.yaml"))
+	// get the contents of the deployment template
+	dStr, err := deployment.Contents(ctx)
 	if err != nil {
 		return err
 	}
 
 	// replace the image and write the new deployment file
 	newDep := strings.ReplaceAll(string(dStr), "##DOCKER_IMAGE##", fmt.Sprintf("%s:%s", dockerImage, sha))
-	df := dag.Directory().WithNewFile("deployment.yaml", newDep)
+	df := dag.Directory().WithNewFile("deploy.yaml", newDep)
 
 	out, err := dag.Container().
 		From("bitnami/kubectl").
@@ -283,7 +216,7 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host
 		WithEnvVariable("CACHE_INVALIDATE", time.Now().String()).
 		WithExec([]string{
 			"apply",
-			"-f", "/files/deployment.yaml",
+			"-f", "/files/deploy.yaml",
 			"--token", secret,
 			"--server", host,
 			"--insecure-skip-tls-verify",
@@ -295,6 +228,133 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host
 	fmt.Println("Kubectl output:", out)
 
 	return fmt.Errorf("failed to deploy to Kubernetes:\n %s", newDep)
+}
+
+func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername, vaultPassword, vaultNamespace string) (VaultSecrets, error) {
+	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
+
+	js, err := dag.Vault().
+		WithHost(vaultHost).
+		WithNamespace(vaultNamespace).
+		WithUserpassAuth(vaultUsername, vaultPassword).
+		GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
+
+	if err != nil {
+		return VaultSecrets{}, err
+	}
+
+	// unmarshal the secret into an object
+	data := map[string]interface{}{}
+	err = json.Unmarshal([]byte(js), &data)
+	if err != nil {
+		return VaultSecrets{}, err
+	}
+
+	secrets := VaultSecrets{
+		k8sAccessToken: data["service_account_token"].(string),
+	}
+
+	// fetch the static secrets from Vault
+	fmt.Println("Fetch static secret from Vault...", vaultHost)
+	js, err = dag.Vault().
+		WithHost(vaultHost).
+		WithNamespace(vaultNamespace).
+		WithUserpassAuth(vaultUsername, vaultPassword).
+		GetSecretJSON(ctx, "secrets/data/hashitalks/deployment")
+
+	if err != nil {
+		return VaultSecrets{}, err
+	}
+
+	err = json.Unmarshal([]byte(js), &data)
+	if err != nil {
+		return VaultSecrets{}, err
+	}
+
+	data = data["data"].(map[string]interface{})
+	secrets.dockerUsername = data["docker_username"].(string)
+	secrets.dockerPassword = data["docker_password"].(string)
+	secrets.k8sAddr = data["kube_addr"].(string)
+
+	return secrets, nil
+}
+
+func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, actionsRequestToken, actionsTokenURL, vaultHost, vaultNamespace string) (VaultSecrets, error) {
+	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
+
+	rq, err := http.NewRequest(http.MethodGet, actionsTokenURL, nil)
+	if err != nil {
+		return VaultSecrets{}, fmt.Errorf("unable to create request: %w", err)
+	}
+
+	// add the bearer token for the request
+	rq.Header.Add("Authorization", fmt.Sprintf("bearer %s", actionsRequestToken))
+
+	// make the request
+	resp, err := http.DefaultClient.Do(rq)
+	if err != nil {
+		return VaultSecrets{}, fmt.Errorf("unable to request token: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return VaultSecrets{}, fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	// parse the response
+	data := map[string]interface{}{}
+
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return VaultSecrets{}, fmt.Errorf("unable to read response body: %w", err)
+	}
+
+	json.Unmarshal(body, &data)
+	gitHubJWT := data["value"].(string)
+
+	js, err := dag.Vault().
+		WithHost(vaultHost).
+		WithNamespace(vaultNamespace).
+		WithJwtauth(gitHubJWT, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"}).
+		GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
+
+	if err != nil {
+		return VaultSecrets{}, err
+	}
+
+	// unmarshal the secret into an object
+	err = json.Unmarshal([]byte(js), &data)
+	if err != nil {
+		return VaultSecrets{}, err
+	}
+
+	secrets := VaultSecrets{
+		k8sAccessToken: data["service_account_token"].(string),
+	}
+
+	// fetch the static secrets from Vault
+	fmt.Println("Fetch static secret from Vault...", vaultHost)
+	js, err = dag.Vault().
+		WithHost(vaultHost).
+		WithNamespace(vaultNamespace).
+		WithJwtauth(gitHubJWT, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"}).
+		GetSecretJSON(ctx, "secrets/data/hashitalks/deployment")
+
+	if err != nil {
+		return VaultSecrets{}, err
+	}
+
+	err = json.Unmarshal([]byte(js), &data)
+	if err != nil {
+		return VaultSecrets{}, err
+	}
+
+	data = data["data"].(map[string]interface{})
+	secrets.dockerUsername = data["docker_username"].(string)
+	secrets.dockerPassword = data["docker_password"].(string)
+	secrets.k8sAddr = data["kube_addr"].(string)
+
+	return secrets, nil
 }
 
 func (d *Build) goCache() *CacheVolume {

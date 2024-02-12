@@ -2,6 +2,10 @@ name: "Dagger Build and Deploy"
 
 on: push
 
+env:
+  VAULT_ADDR: https://vault-cluster-public-vault-0bbbdae6.9eb86982.z1.hashicorp.cloud:8200/
+  VAULT_NAMESPACE: /admin/dev
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,5 +21,5 @@ jobs:
         with:
           verb: call 
           module: ./dagger/build
-          args: test-get-token --actions-request-token=ACTIONS_ID_TOKEN_REQUEST_TOKEN --actions-token-url=${ACTIONS_ID_TOKEN_REQUEST_URL} --vault-namespace=/admin/dev --vault-addr="https://vault-cluster-public-vault-0bbbdae6.9eb86982.z1.hashicorp.cloud:8200/"
+          args: all --src=. --vault-addr=${VAULT_ADDR} --vault-namespace=${VAULT_NAMESPACE} --actions-request-token=ACTIONS_ID_TOKEN_REQUEST_TOKEN --actions-token-url=${ACTIONS_ID_TOKEN_REQUEST_URL} 
           version: "0.9.9"

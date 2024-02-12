@@ -11,15 +11,11 @@ application to Kubernetes.
 
 ```bash
 dagger -m ./dagger/build call all \
-  --src ./src 
-  --docker-username=DOCKER_USERNAME \
-  --docker-password=DOCKER_PASSWORD \
-  --vault-host=${VAULT_ADDR} \
+  --src ./src \
+  --vault-addr=${VAULT_ADDR} \
   --vault-username=VAULT_USER \
   --vault-password=VAULT_PASSWORD \
-  --vault-namespace=${VAULT_NAMESPACE} \
-  --kube-host=${KUBE_HOST} \
-  --kube-deployment=./src/kubernetes/deploy.yaml
+  --vault-namespace=${VAULT_NAMESPACE}
 ```
 
 ## Authenticate Vault as a user
@@ -179,6 +175,12 @@ This can be used to deploy the application to the default namespace.
 kubectl apply -f ./src/kubernetes/deploy.yaml --server="${KUBE_HOST}" --token="${KUBE_TOKEN}" -n default --insecure-skip-tls-verify
 ```
 
+## Create static secrets for the deployment
+
+```shell
+vault kv put secrets/hashitalks/deployment kube_addr=${KUBE_ADDR} docker_username=${DOCKER_USERNAME} docker_password=${DOCKER_PASSWORD}
+```
+
 ## Configure GitHub Actions to authenticate with Vault
 
 https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-hashicorp-vault
@@ -204,6 +206,10 @@ Next you need to create a policy that will enable the authenticated user to acce
 vault policy write kubernetes-deployer - <<EOF
 path "kubernetes/hashitalks/creds/deployer-default" {
   capabilities = [ "create", "update" ]
+}
+
+path "secrets/hashitalks/deployment" {
+  capabilities = [ "read" ]
 }
 EOF
 ```
