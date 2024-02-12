@@ -7108,6 +7108,27 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				}
 			}
 			return nil, (*Build).All(&parent, ctx, src, vaultHost, vaultUsername, vaultPassword, vaultNamespace, dockerUsername, dockerPassword, kubeDeployment, kubeHost)
+		case "TestGetToken":
+			var parent Build
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var actionsRequestToken *Secret
+			if inputArgs["actionsRequestToken"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["actionsRequestToken"]), &actionsRequestToken)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg actionsRequestToken", err))
+				}
+			}
+			var actionsTokenUrl string
+			if inputArgs["actionsTokenURL"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["actionsTokenURL"]), &actionsTokenUrl)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg actionsTokenURL", err))
+				}
+			}
+			return (*Build).TestGetToken(&parent, ctx, actionsRequestToken, actionsTokenUrl)
 		case "UnitTest":
 			var parent Build
 			err = json.Unmarshal(parentJSON, &parent)
@@ -7156,6 +7177,13 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg bin", err))
 				}
 			}
+			var sha string
+			if inputArgs["sha"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["sha"]), &sha)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg sha", err))
+				}
+			}
 			var dockerUsername string
 			if inputArgs["dockerUsername"] != nil {
 				err = json.Unmarshal([]byte(inputArgs["dockerUsername"]), &dockerUsername)
@@ -7170,7 +7198,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg dockerPassword", err))
 				}
 			}
-			return nil, (*Build).DockerBuildAndPush(&parent, ctx, bin, dockerUsername, dockerPassword)
+			return nil, (*Build).DockerBuildAndPush(&parent, ctx, bin, sha, dockerUsername, dockerPassword)
 		case "FetchDeploymentSecret":
 			var parent Build
 			err = json.Unmarshal(parentJSON, &parent)
@@ -7212,6 +7240,13 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 			if err != nil {
 				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
 			}
+			var sha string
+			if inputArgs["sha"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["sha"]), &sha)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg sha", err))
+				}
+			}
 			var secret string
 			if inputArgs["secret"] != nil {
 				err = json.Unmarshal([]byte(inputArgs["secret"]), &secret)
@@ -7233,7 +7268,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg deployment", err))
 				}
 			}
-			return nil, (*Build).DeployToKubernetes(&parent, ctx, secret, host, deployment)
+			return nil, (*Build).DeployToKubernetes(&parent, ctx, sha, secret, host, deployment)
 		default:
 			return nil, fmt.Errorf("unknown function %s", fnName)
 		}
@@ -7244,6 +7279,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					WithFunction(
 						dag.Function("All",
 							dag.TypeDef().WithKind(VoidKind).WithOptional(true)).
+							WithDescription("All runs the unit tests, builds the application, packages it in a container, and pushes it to the registry.\nIt also fetches a secret from Vault and deploys the application to Kubernetes.\n\nIf the optional parameters for Docker are not provided, the corresponding steps are skipped.\nIf the optional parameters fro Vault and Kubernetes are not provided, the corresponding steps are skipped.").
 							WithArg("src", dag.TypeDef().WithObject("Directory")).
 							WithArg("vaultHost", dag.TypeDef().WithKind(StringKind).WithOptional(true)).
 							WithArg("vaultUsername", dag.TypeDef().WithObject("Secret").WithOptional(true)).
@@ -7253,6 +7289,11 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 							WithArg("dockerPassword", dag.TypeDef().WithObject("Secret").WithOptional(true)).
 							WithArg("kubeDeployment", dag.TypeDef().WithObject("File").WithOptional(true)).
 							WithArg("kubeHost", dag.TypeDef().WithKind(StringKind).WithOptional(true))).
+					WithFunction(
+						dag.Function("TestGetToken",
+							dag.TypeDef().WithKind(StringKind)).
+							WithArg("actionsRequestToken", dag.TypeDef().WithObject("Secret")).
+							WithArg("actionsTokenURL", dag.TypeDef().WithKind(StringKind))).
 					WithFunction(
 						dag.Function("UnitTest",
 							dag.TypeDef().WithKind(VoidKind).WithOptional(true)).
@@ -7266,6 +7307,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 						dag.Function("DockerBuildAndPush",
 							dag.TypeDef().WithKind(VoidKind).WithOptional(true)).
 							WithArg("bin", dag.TypeDef().WithObject("Directory")).
+							WithArg("sha", dag.TypeDef().WithKind(StringKind)).
 							WithArg("dockerUsername", dag.TypeDef().WithKind(StringKind)).
 							WithArg("dockerPassword", dag.TypeDef().WithObject("Secret"))).
 					WithFunction(
@@ -7278,6 +7320,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					WithFunction(
 						dag.Function("DeployToKubernetes",
 							dag.TypeDef().WithKind(VoidKind).WithOptional(true)).
+							WithArg("sha", dag.TypeDef().WithKind(StringKind)).
 							WithArg("secret", dag.TypeDef().WithKind(StringKind)).
 							WithArg("host", dag.TypeDef().WithKind(StringKind)).
 							WithArg("deployment", dag.TypeDef().WithObject("File")))), nil

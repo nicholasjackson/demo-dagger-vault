@@ -9,6 +9,10 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - name: Fetch OIDC token
-        run: |
-          curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange"
+      - name: Fetch OIDC Token
+        uses: dagger/dagger-for-github@v5
+        with:
+          verb: call 
+          module: ./dagger/build
+          args: test-get-token --actions-request-token=ACTIONS_ID_TOKEN_REQUEST_TOKEN --actions-token-url=${$ACTIONS_ID_TOKEN_REQUEST_URL}
+          version: "0.9.9"

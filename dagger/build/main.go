@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -92,6 +94,40 @@ func (b *Build) All(
 	}
 
 	return nil
+}
+
+func (d *Build) TestGetToken(ctx context.Context, actionsRequestToken *Secret, actionsTokenURL string) (string, error) {
+	rq, err := http.NewRequest(http.MethodGet, actionsTokenURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("unable to create request: %w", err)
+	}
+
+	// add the bearer token for the request
+	token, _ := actionsRequestToken.Plaintext(ctx)
+	rq.Header.Add("Authorization", fmt.Sprintf("bearer %s", token))
+
+	// make the request
+	resp, err := http.DefaultClient.Do(rq)
+	if err != nil {
+		return "", fmt.Errorf("unable to request token: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	// parse the response
+	data := map[string]interface{}{}
+
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("unable to read response body: %w", err)
+	}
+
+	json.Unmarshal(body, data)
+
+	return data["value"].(string), nil
 }
 
 func (d *Build) UnitTest(ctx context.Context, src *Directory, withRace bool) error {
