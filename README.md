@@ -201,9 +201,9 @@ vault write auth/jwt/github/config \
 Next you need to create a policy that will enable the authenticated user to access the deployer role
 
 ```shell
-vault policy write kubernnetes-deployer - <<EOF
-path "kubernetes/hashitalks/roles/deployer-default" {
-  capabilities = [ "create" ]
+vault policy write kubernetes-deployer - <<EOF
+path "kubernetes/hashitalks/creds/deployer-default" {
+  capabilities = [ "create", "update" ]
 }
 EOF
 ```
@@ -219,7 +219,7 @@ vault write auth/jwt/github/role/hashitalks-deployer -<<EOF
   "bound_claims": {
     "repository": "nicholasjackson/demo-dagger-vault"
   },
-  "policies": ["deployer-default"],
+  "policies": ["kubernetes-deployer"],
   "ttl": "10m"
 }
 EOF
@@ -233,7 +233,7 @@ EOF
 - [x] Create Roles to access Kubernetes
 - [x] Create a Simple module to access Vault Secrets from Dagger
 - [x] Create a Dagger config to build an application and deploy to Kubernetes
-- [ ] Configure OIDC Auth in Vault to enable GitHub Actions to login
+- [x] Configure OIDC Auth in Vault to enable GitHub Actions to login
 - [ ] Add a GitHub Action to run Dagger
 - [ ] Configure OIDC Auth in Vault to enable CircleCI to login
 - [ ] Add a CircleCI config to run Dagger
