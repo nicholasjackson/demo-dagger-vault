@@ -117,7 +117,7 @@ func (d *Build) TestGetToken(ctx context.Context, actionsRequestToken *Secret, a
 	}
 
 	// parse the response
-	data := map[string]interface{}{}
+	//data := map[string]interface{}{}
 
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
