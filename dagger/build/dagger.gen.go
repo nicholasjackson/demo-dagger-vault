@@ -219,6 +219,9 @@ type TypeDefID string
 // The `VaultID` scalar type represents an identifier for an object of type Vault.
 type VaultID string
 
+// The `VaultJwtauthID` scalar type represents an identifier for an object of type VaultJwtauth.
+type VaultJwtauthID string
+
 // The `VaultUserpassAuthID` scalar type represents an identifier for an object of type VaultUserpassAuth.
 type VaultUserpassAuthID string
 
@@ -5668,6 +5671,17 @@ func (r *Client) LoadVaultFromID(id VaultID) *Vault {
 	}
 }
 
+// Load a VaultJwtauth from its ID.
+func (r *Client) LoadVaultJwtauthFromID(id VaultJwtauthID) *VaultJwtauth {
+	q := r.q.Select("loadVaultJwtauthFromID")
+	q = q.Arg("id", id)
+
+	return &VaultJwtauth{
+		q: q,
+		c: r.c,
+	}
+}
+
 // Load a VaultUserpassAuth from its ID.
 func (r *Client) LoadVaultUserpassAuthFromID(id VaultUserpassAuthID) *VaultUserpassAuth {
 	q := r.q.Select("loadVaultUserpassAuthFromID")
@@ -6599,6 +6613,15 @@ func (r *Vault) UnmarshalJSON(bs []byte) error {
 	return nil
 }
 
+func (r *Vault) Jwt() *VaultJwtauth {
+	q := r.q.Select("jwt")
+
+	return &VaultJwtauth{
+		q: q,
+		c: r.c,
+	}
+}
+
 func (r *Vault) Namespace(ctx context.Context) (string, error) {
 	if r.namespace != nil {
 		return *r.namespace, nil
@@ -6669,6 +6692,28 @@ func (r *Vault) WithHost(host string) *Vault {
 	}
 }
 
+// VaultWithJwtauthOpts contains options for Vault.WithJwtauth
+type VaultWithJwtauthOpts struct {
+	Path string
+}
+
+func (r *Vault) WithJwtauth(token string, role string, opts ...VaultWithJwtauthOpts) *Vault {
+	q := r.q.Select("withJwtauth")
+	for i := len(opts) - 1; i >= 0; i-- {
+		// `path` optional argument
+		if !querybuilder.IsZeroValue(opts[i].Path) {
+			q = q.Arg("path", opts[i].Path)
+		}
+	}
+	q = q.Arg("token", token)
+	q = q.Arg("role", role)
+
+	return &Vault{
+		q: q,
+		c: r.c,
+	}
+}
+
 // WithNamespace sets the namespace for the Vault client
 func (r *Vault) WithNamespace(namespace string) *Vault {
 	q := r.q.Select("withNamespace")
@@ -6701,6 +6746,101 @@ func (r *Vault) WithUserpassAuth(username string, password string, opts ...Vault
 		q: q,
 		c: r.c,
 	}
+}
+
+type VaultJwtauth struct {
+	q *querybuilder.Selection
+	c graphql.Client
+
+	id    *VaultJwtauthID
+	path  *string
+	role  *string
+	token *string
+}
+
+// A unique identifier for this VaultJwtauth.
+func (r *VaultJwtauth) ID(ctx context.Context) (VaultJwtauthID, error) {
+	if r.id != nil {
+		return *r.id, nil
+	}
+	q := r.q.Select("id")
+
+	var response VaultJwtauthID
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+// XXX_GraphQLType is an internal function. It returns the native GraphQL type name
+func (r *VaultJwtauth) XXX_GraphQLType() string {
+	return "VaultJwtauth"
+}
+
+// XXX_GraphQLIDType is an internal function. It returns the native GraphQL type name for the ID of this object
+func (r *VaultJwtauth) XXX_GraphQLIDType() string {
+	return "VaultJwtauthID"
+}
+
+// XXX_GraphQLID is an internal function. It returns the underlying type ID
+func (r *VaultJwtauth) XXX_GraphQLID(ctx context.Context) (string, error) {
+	id, err := r.ID(ctx)
+	if err != nil {
+		return "", err
+	}
+	return string(id), nil
+}
+
+func (r *VaultJwtauth) MarshalJSON() ([]byte, error) {
+	id, err := r.ID(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(id)
+}
+func (r *VaultJwtauth) UnmarshalJSON(bs []byte) error {
+	var id string
+	err := json.Unmarshal(bs, &id)
+	if err != nil {
+		return err
+	}
+	*r = *dag.LoadVaultJwtauthFromID(VaultJwtauthID(id))
+	return nil
+}
+
+func (r *VaultJwtauth) Path(ctx context.Context) (string, error) {
+	if r.path != nil {
+		return *r.path, nil
+	}
+	q := r.q.Select("path")
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+func (r *VaultJwtauth) Role(ctx context.Context) (string, error) {
+	if r.role != nil {
+		return *r.role, nil
+	}
+	q := r.q.Select("role")
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+func (r *VaultJwtauth) Token(ctx context.Context) (string, error) {
+	if r.token != nil {
+		return *r.token, nil
+	}
+	q := r.q.Select("token")
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
 }
 
 type VaultUserpassAuth struct {
