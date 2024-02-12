@@ -16,6 +16,6 @@ jobs:
         uses: dagger/dagger-for-github@v5
         with:
           verb: call 
-          module: ./dagger/build
-          args: test-get-token --actions-request-token=ACTIONS_ID_TOKEN_REQUEST_TOKEN --actions-token-url=${ACTIONS_ID_TOKEN_REQUEST_URL}
+          module: ./dagger/build"
+          args: test-get-token --actions-request-token=ACTIONS_ID_TOKEN_REQUEST_TOKEN --actions-token-url=${ACTIONS_ID_TOKEN_REQUEST_URL} --vault-host="https://vault-cluster-public-vault-0bbbdae6.9eb86982.z1.hashicorp.cloud:8200/"
           version: "0.9.9"
