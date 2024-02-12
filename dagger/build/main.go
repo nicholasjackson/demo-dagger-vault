@@ -126,13 +126,7 @@ func (d *Build) TestGetToken(ctx context.Context, actionsRequestToken *Secret, a
 	}
 
 	json.Unmarshal(body, &data)
-
 	gitHubJWT := data["value"].(string)
-
-	parts := strings.Split(gitHubJWT, ".")
-	for i, p := range parts {
-		fmt.Println("data %d: %s", i, p)
-	}
 
 	// authenticate with Vault and retrieve a K8s token
 	_, err = dag.Vault().
