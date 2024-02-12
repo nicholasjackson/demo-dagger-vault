@@ -240,6 +240,6 @@ EOF
 - [x] Create a Simple module to access Vault Secrets from Dagger
 - [x] Create a Dagger config to build an application and deploy to Kubernetes
 - [x] Configure OIDC Auth in Vault to enable GitHub Actions to login
-- [ ] Add a GitHub Action to run Dagger
+- [x] Add a GitHub Action to run Dagger
 - [ ] Configure OIDC Auth in Vault to enable CircleCI to login
 - [ ] Add a CircleCI config to run Dagger
