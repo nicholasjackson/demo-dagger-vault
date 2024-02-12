@@ -14,5 +14,5 @@ jobs:
         with:
           verb: call 
           module: ./dagger/build
-          args: test-get-token --actions-request-token=ACTIONS_ID_TOKEN_REQUEST_TOKEN --actions-token-url=${$ACTIONS_ID_TOKEN_REQUEST_URL}
+          args: test-get-token --actions-request-token=ACTIONS_ID_TOKEN_REQUEST_TOKEN --actions-token-url=${ACTIONS_ID_TOKEN_REQUEST_URL}
           version: "0.9.9"
