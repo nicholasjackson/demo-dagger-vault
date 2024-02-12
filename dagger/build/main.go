@@ -125,9 +125,10 @@ func (d *Build) TestGetToken(ctx context.Context, actionsRequestToken *Secret, a
 		return "", fmt.Errorf("unable to read response body: %w", err)
 	}
 
-	json.Unmarshal(body, data)
+	//json.Unmarshal(body, data)
 
-	return data["value"].(string), nil
+	//return data["value"].(string), nil
+	return string(body), nil
 }
 
 func (d *Build) UnitTest(ctx context.Context, src *Directory, withRace bool) error {
