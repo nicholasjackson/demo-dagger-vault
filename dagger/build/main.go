@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -128,6 +129,8 @@ func (d *Build) TestGetToken(ctx context.Context, actionsRequestToken *Secret, a
 	json.Unmarshal(body, &data)
 
 	gitHubJWT := data["value"].(string)
+
+	fmt.Println("data: ", base64.StdEncoding.EncodeToString([]byte(gitHubJWT)))
 
 	// authenticate with Vault and retrieve a K8s token
 	_, err = dag.Vault().
@@ -261,11 +264,14 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host
 	fmt.Println("Deploy to Kubernetes...", host, sha)
 
 	// first replace the image tag in the deployment file
-	dir := os.TempDir()
-	defer os.RemoveAll(dir)
+	dir, err := os.CreateTemp("", "")
+	if err != nil {
+		return fmt.Errorf("unable to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(dir.Name())
 
-	deployment.Export(ctx, path.Join(dir, "deployment.yaml"))
-	dStr, err := os.ReadFile(path.Join(dir, "deployment.yaml"))
+	deployment.Export(ctx, path.Join(dir.Name(), "deployment.yaml"))
+	dStr, err := os.ReadFile(path.Join(dir.Name(), "deployment.yaml"))
 	if err != nil {
 		return err
 	}
@@ -285,10 +291,13 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host
 			"--server", host,
 			"--insecure-skip-tls-verify",
 		}).Stdout(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to deploy to Kubernetes:\n %s", newDep)
+	}
 
 	fmt.Println("Kubectl output:", out)
 
-	return fmt.Errorf("failed to deploy to Kubernetes", newDep)
+	return fmt.Errorf("failed to deploy to Kubernetes:\n %s", newDep)
 }
 
 func (d *Build) goCache() *CacheVolume {
