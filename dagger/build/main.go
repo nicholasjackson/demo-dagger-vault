@@ -31,7 +31,6 @@ type Build struct {
 func (b *Build) All(
 	ctx context.Context,
 	src *Directory,
-	// +optional
 	vaultAddr string,
 	// +optional
 	vaultNamespace string,
@@ -44,6 +43,10 @@ func (b *Build) All(
 	// +optional
 	actionsTokenURL string,
 ) error {
+	if vaultAddr == "" {
+		return fmt.Errorf("vault address is required")
+	}
+
 	// run the unit tests
 	err := b.UnitTest(ctx, src, false)
 	if err != nil {
