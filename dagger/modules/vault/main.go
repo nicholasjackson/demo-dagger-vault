@@ -186,7 +186,7 @@ func (v *Vault) getClient(ctx context.Context) (*vault.Client, error) {
 	}
 
 	if v.JWT != nil {
-		vr, err := client.Auth.JwtLogin(ctx, schema.JwtLoginRequest{Jwt: v.JWT.Path, Role: v.JWT.Role}, vault.WithNamespace(v.Namespace), vault.WithMountPath(v.JWT.Path))
+		vr, err := client.Auth.JwtLogin(ctx, schema.JwtLoginRequest{Jwt: v.JWT.Token, Role: v.JWT.Role}, vault.WithNamespace(v.Namespace), vault.WithMountPath(v.JWT.Path))
 		if err != nil {
 			return nil, fmt.Errorf("failed to login: %w", err)
 		}
