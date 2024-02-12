@@ -1,3 +1,7 @@
+name: "Dagger Build and Deploy"
+
+on: push
+
 jobs:
   build:
     runs-on: ubuntu-latest
