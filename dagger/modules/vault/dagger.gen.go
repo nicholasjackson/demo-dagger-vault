@@ -6626,6 +6626,7 @@ func (r *Vault) UnmarshalJSON(bs []byte) error {
 		Namespace string
 		Host      string
 		Userpass  *UserpassAuth
+		JWT       *JWTAuth
 	}
 	err := json.Unmarshal(bs, &concrete)
 	if err != nil {
@@ -6634,6 +6635,7 @@ func (r *Vault) UnmarshalJSON(bs []byte) error {
 	r.Namespace = concrete.Namespace
 	r.Host = concrete.Host
 	r.Userpass = concrete.Userpass
+	r.JWT = concrete.JWT
 	return nil
 }
 func (r *UserpassAuth) UnmarshalJSON(bs []byte) error {
@@ -6648,6 +6650,21 @@ func (r *UserpassAuth) UnmarshalJSON(bs []byte) error {
 	}
 	r.Username = concrete.Username
 	r.Password = concrete.Password
+	r.Path = concrete.Path
+	return nil
+}
+func (r *JWTAuth) UnmarshalJSON(bs []byte) error {
+	var concrete struct {
+		Token string
+		Role  string
+		Path  string
+	}
+	err := json.Unmarshal(bs, &concrete)
+	if err != nil {
+		return err
+	}
+	r.Token = concrete.Token
+	r.Role = concrete.Role
 	r.Path = concrete.Path
 	return nil
 }
@@ -6754,7 +6771,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg username", err))
 				}
 			}
-			var password string
+			var password *Secret
 			if inputArgs["password"] != nil {
 				err = json.Unmarshal([]byte(inputArgs["password"]), &password)
 				if err != nil {
@@ -6769,7 +6786,49 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 				}
 			}
 			return (*Vault).WithUserpassAuth(&parent, ctx, username, password, path), nil
-		case "GetSecretJSON":
+		case "WithJWTAuth":
+			var parent Vault
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var token *Secret
+			if inputArgs["token"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["token"]), &token)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg token", err))
+				}
+			}
+			var role string
+			if inputArgs["role"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["role"]), &role)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg role", err))
+				}
+			}
+			var path string
+			if inputArgs["path"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["path"]), &path)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg path", err))
+				}
+			}
+			return (*Vault).WithJWTAuth(&parent, ctx, token, role, path), nil
+		case "KVGet":
+			var parent Vault
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var secret string
+			if inputArgs["secret"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["secret"]), &secret)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg secret", err))
+				}
+			}
+			return (*Vault).KVGet(&parent, ctx, secret)
+		case "Write":
 			var parent Vault
 			err = json.Unmarshal(parentJSON, &parent)
 			if err != nil {
@@ -6789,15 +6848,22 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg params", err))
 				}
 			}
-			var operationType string
-			if inputArgs["operationType"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["operationType"]), &operationType)
+			return (*Vault).Write(&parent, ctx, secret, params)
+		case "Read":
+			var parent Vault
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var secret string
+			if inputArgs["secret"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["secret"]), &secret)
 				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg operationType", err))
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg secret", err))
 				}
 			}
-			return (*Vault).GetSecretJSON(&parent, ctx, secret, params, operationType)
-		case "TestGetSecret":
+			return (*Vault).Read(&parent, ctx, secret)
+		case "TestWrite":
 			var parent Vault
 			err = json.Unmarshal(parentJSON, &parent)
 			if err != nil {
@@ -6838,13 +6904,6 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg secret", err))
 				}
 			}
-			var opType string
-			if inputArgs["opType"] != nil {
-				err = json.Unmarshal([]byte(inputArgs["opType"]), &opType)
-				if err != nil {
-					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg opType", err))
-				}
-			}
 			var params string
 			if inputArgs["params"] != nil {
 				err = json.Unmarshal([]byte(inputArgs["params"]), &params)
@@ -6852,7 +6911,49 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg params", err))
 				}
 			}
-			return (*Vault).TestGetSecret(&parent, ctx, host, namespace, username, password, secret, opType, params)
+			return (*Vault).TestWrite(&parent, ctx, host, namespace, username, password, secret, params)
+		case "TestKVGet":
+			var parent Vault
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var host string
+			if inputArgs["host"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["host"]), &host)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg host", err))
+				}
+			}
+			var namespace string
+			if inputArgs["namespace"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["namespace"]), &namespace)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg namespace", err))
+				}
+			}
+			var username *Secret
+			if inputArgs["username"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["username"]), &username)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg username", err))
+				}
+			}
+			var password *Secret
+			if inputArgs["password"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["password"]), &password)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg password", err))
+				}
+			}
+			var secret string
+			if inputArgs["secret"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["secret"]), &secret)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg secret", err))
+				}
+			}
+			return (*Vault).TestKVGet(&parent, ctx, host, namespace, username, password, secret)
 		default:
 			return nil, fmt.Errorf("unknown function %s", fnName)
 		}
@@ -6875,33 +6976,62 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 							dag.TypeDef().WithObject("Vault")).
 							WithDescription("WithUserpassAuth sets the userpass autrhentication for the Vault client").
 							WithArg("username", dag.TypeDef().WithKind(StringKind)).
-							WithArg("password", dag.TypeDef().WithKind(StringKind)).
+							WithArg("password", dag.TypeDef().WithObject("Secret")).
 							WithArg("path", dag.TypeDef().WithKind(StringKind).WithOptional(true), FunctionWithArgOpts{DefaultValue: JSON("\"userpass\"")})).
 					WithFunction(
-						dag.Function("GetSecretJSON",
-							dag.TypeDef().WithKind(StringKind)).
-							WithDescription("GetSecretJSON returns a vault secret as a JSON string").
-							WithArg("secret", dag.TypeDef().WithKind(StringKind)).
-							WithArg("params", dag.TypeDef().WithKind(StringKind).WithOptional(true)).
-							WithArg("operationType", dag.TypeDef().WithKind(StringKind).WithOptional(true), FunctionWithArgOpts{DefaultValue: JSON("\"read\"")})).
+						dag.Function("WithJWTAuth",
+							dag.TypeDef().WithObject("Vault")).
+							WithArg("token", dag.TypeDef().WithObject("Secret")).
+							WithArg("role", dag.TypeDef().WithKind(StringKind)).
+							WithArg("path", dag.TypeDef().WithKind(StringKind).WithOptional(true), FunctionWithArgOpts{DefaultValue: JSON("\"jwt\"")})).
 					WithFunction(
-						dag.Function("TestGetSecret",
+						dag.Function("KVGet",
 							dag.TypeDef().WithKind(StringKind)).
-							WithDescription("TestGetSecret is a test function for the GetSecretJSON function\nexample usage: dagger call test-get-secret --host ${VAULT_ADDR} --namespace=${VAULT_NAMESPACE} --username=VAULT_USER --password=VAULT_PASSWORD --secret=kubernetes/hashitalks/creds/deployer-default --params=\"kubernetes_namespace=default\" --op-type=write").
+							WithDescription("GetSecretJSON returns a Vault secret as a JSON string\nthis method corresponds to the Vault CLI command `vault kv get`").
+							WithArg("secret", dag.TypeDef().WithKind(StringKind))).
+					WithFunction(
+						dag.Function("Write",
+							dag.TypeDef().WithKind(StringKind)).
+							WithDescription("Write writes a vault secret and returns the response as a JSON string\nthis method corresponds to the Vault CLI command `vault write`\noptional params can be passed as a comma separated list of key=value pairs").
+							WithArg("secret", dag.TypeDef().WithKind(StringKind)).
+							WithArg("params", dag.TypeDef().WithKind(StringKind).WithOptional(true))).
+					WithFunction(
+						dag.Function("Read",
+							dag.TypeDef().WithKind(StringKind)).
+							WithDescription("Read returns a vault secret as a JSON string\nthis method corresponds to the Vault CLI command `vault read`").
+							WithArg("secret", dag.TypeDef().WithKind(StringKind))).
+					WithFunction(
+						dag.Function("TestWrite",
+							dag.TypeDef().WithKind(StringKind)).
+							WithDescription("TestWrite is a test function for the GetSecretJSON function\nexample usage: dagger call test-write --host ${VAULT_ADDR} --namespace=${VAULT_NAMESPACE} --username=VAULT_USER --password=VAULT_PASSWORD --secret=kubernetes/hashitalks/creds/deployer-default --params=\"kubernetes_namespace=default\"").
 							WithArg("host", dag.TypeDef().WithKind(StringKind)).
 							WithArg("namespace", dag.TypeDef().WithKind(StringKind)).
 							WithArg("username", dag.TypeDef().WithObject("Secret")).
 							WithArg("password", dag.TypeDef().WithObject("Secret")).
 							WithArg("secret", dag.TypeDef().WithKind(StringKind)).
-							WithArg("opType", dag.TypeDef().WithKind(StringKind).WithOptional(true), FunctionWithArgOpts{DefaultValue: JSON("\"read\"")}).
 							WithArg("params", dag.TypeDef().WithKind(StringKind).WithOptional(true))).
+					WithFunction(
+						dag.Function("TestKVGet",
+							dag.TypeDef().WithKind(StringKind)).
+							WithDescription("TestKVGet is a test function for the GetSecretJSON function\nexample usage: dagger call test-write --host ${VAULT_ADDR} --namespace=${VAULT_NAMESPACE} --username=VAULT_USER --password=VAULT_PASSWORD --secret=secrets/hashitalks/creds/deployment").
+							WithArg("host", dag.TypeDef().WithKind(StringKind)).
+							WithArg("namespace", dag.TypeDef().WithKind(StringKind)).
+							WithArg("username", dag.TypeDef().WithObject("Secret")).
+							WithArg("password", dag.TypeDef().WithObject("Secret")).
+							WithArg("secret", dag.TypeDef().WithKind(StringKind))).
 					WithField("Namespace", dag.TypeDef().WithKind(StringKind)).
 					WithField("Host", dag.TypeDef().WithKind(StringKind)).
-					WithField("Userpass", dag.TypeDef().WithObject("UserpassAuth"))).
+					WithField("Userpass", dag.TypeDef().WithObject("UserpassAuth")).
+					WithField("JWT", dag.TypeDef().WithObject("JWTAuth"))).
 			WithObject(
 				dag.TypeDef().WithObject("UserpassAuth").
 					WithField("Username", dag.TypeDef().WithKind(StringKind)).
 					WithField("Password", dag.TypeDef().WithKind(StringKind)).
+					WithField("Path", dag.TypeDef().WithKind(StringKind))).
+			WithObject(
+				dag.TypeDef().WithObject("JWTAuth").
+					WithField("Token", dag.TypeDef().WithKind(StringKind)).
+					WithField("Role", dag.TypeDef().WithKind(StringKind)).
 					WithField("Path", dag.TypeDef().WithKind(StringKind))), nil
 	default:
 		return nil, fmt.Errorf("unknown object %s", parentName)
