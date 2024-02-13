@@ -36,33 +36,83 @@ JWT tokens.
 - `path` (Optional string) - The path to use for the auth mount, defaults to `jwt`.
 
 
-## GetSecretJSON
-The `GetSecretJSON` function is used to get a secret from Vault and return it as a json formatted string.
+## Write
+The `Write` function is used to write data to Vault, it corresponds to the Vault CLI command `vault write`.
 
 ### Parameters
 - `secret` (string) - The path to the secret in Vault.
 - `params` (Optional string) - The parameters to use for the secret in Vault, specified as as comma separated key value i.e `ttl=2h,policy=default`.
-- `operationType` (Optional string) - The operation type to use for the secret in Vault, defaults to `read`.
 
 ### Returns
-- `string` - The secret from Vault as a json formatted string.
+- `string` - The secret from Vault as a JSON formatted string.
 - `error` - An error if the secret could not be retrieved.
 
 ### Example
 
 ```go
-// get the secret from vault, the secret is returned as a JSON string
+pass := dag.SetSecret("password", "my-value")
+
 j, err := dag.Vault().
   WithNamespace("my-namespace").
   WithHost("https://vault.example.com").
-  WithUserpassAuth(ctx, "my-username", "my-password").
-  GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", "kubernetes_namespace=default", "write")
+  WithUserpassAuth(ctx, "my-username", pass).
+  Write(ctx, "kubernetes/hashitalks/creds/deployer-default", "kubernetes_namespace=default")
 
 // convert the json string to a map
 var data map[string]interface{}
 err = json.Unmarshal([]byte(j), &data)
 ```
 
+## Read
+The `Read` function is used to write data to Vault, it corresponds to the Vault CLI command `vault read`.
+
+### Parameters
+- `secret` (string) - The path to the secret in Vault.
+
+### Returns
+- `string` - The secret from Vault as a JSON formatted string.
+- `error` - An error if the secret could not be retrieved.
+
+### Example
+
+```go
+pass := dag.SetSecret("password", "my-value")
+
+j, err := dag.Vault().
+  WithNamespace("my-namespace").
+  WithHost("https://vault.example.com").
+  WithUserpassAuth(ctx, "my-username", pass).
+  Read(ctx, "secrets/data/hashitalks/deployer") 
+```
+
+## KVGet
+The `KVGet` function is used to write read a secret from the Vault KV. It corresponds to the Vault CLI command `vault kv get`.
+Like the `cli` command the secret path does not need to include the addtional path `data` for version 2 secret engines.
+The version of the secret engine is automatically determined.
+
+### Parameters
+- `secret` (string) - The path to the secret in Vault.
+
+### Returns
+- `string` - The secret from Vault as a JSON formatted string.
+- `error` - An error if the secret could not be retrieved.
+
+### Example
+
+```go
+pass := dag.SetSecret("password", "my-value")
+
+j, err := dag.Vault().
+  WithNamespace("my-namespace").
+  WithHost("https://vault.example.com").
+  WithUserpassAuth(ctx, "my-username", pass).
+  Kvget(ctx, "secrets/hashitalks/deployer") 
+
+// convert the json string to a map, note like the cli command the returned json string
+// does not include the additional `data` node for version 2 secret engines
+var data map[string]interface{}
+err = json.Unmarshal([]byte(j), &data)
+```
 
 ## Testing
 
