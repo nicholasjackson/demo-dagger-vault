@@ -6742,11 +6742,14 @@ type Vault struct {
 	q *querybuilder.Selection
 	c graphql.Client
 
-	getSecretJson *string
-	host          *string
-	id            *VaultID
-	namespace     *string
-	testGetSecret *string
+	host      *string
+	id        *VaultID
+	kvget     *string
+	namespace *string
+	read      *string
+	testKvget *string
+	testWrite *string
+	write     *string
 }
 type WithVaultFunc func(r *Vault) *Vault
 
@@ -6755,37 +6758,6 @@ type WithVaultFunc func(r *Vault) *Vault
 // This is useful for reusability and readability by not breaking the calling chain.
 func (r *Vault) With(f WithVaultFunc) *Vault {
 	return f(r)
-}
-
-// VaultGetSecretJSONOpts contains options for Vault.GetSecretJSON
-type VaultGetSecretJSONOpts struct {
-	Params string
-
-	OperationType string
-}
-
-// GetSecretJSON returns a vault secret as a JSON string
-func (r *Vault) GetSecretJSON(ctx context.Context, secret string, opts ...VaultGetSecretJSONOpts) (string, error) {
-	if r.getSecretJson != nil {
-		return *r.getSecretJson, nil
-	}
-	q := r.q.Select("getSecretJson")
-	for i := len(opts) - 1; i >= 0; i-- {
-		// `params` optional argument
-		if !querybuilder.IsZeroValue(opts[i].Params) {
-			q = q.Arg("params", opts[i].Params)
-		}
-		// `operationType` optional argument
-		if !querybuilder.IsZeroValue(opts[i].OperationType) {
-			q = q.Arg("operationType", opts[i].OperationType)
-		}
-	}
-	q = q.Arg("secret", secret)
-
-	var response string
-
-	q = q.Bind(&response)
-	return response, q.Execute(ctx, r.c)
 }
 
 func (r *Vault) Host(ctx context.Context) (string, error) {
@@ -6858,6 +6830,21 @@ func (r *Vault) Jwt() *VaultJwtauth {
 	}
 }
 
+// GetSecretJSON returns a Vault secret as a JSON string
+// this method corresponds to the Vault CLI command `vault kv get`
+func (r *Vault) Kvget(ctx context.Context, secret string) (string, error) {
+	if r.kvget != nil {
+		return *r.kvget, nil
+	}
+	q := r.q.Select("kvget")
+	q = q.Arg("secret", secret)
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
 func (r *Vault) Namespace(ctx context.Context) (string, error) {
 	if r.namespace != nil {
 		return *r.namespace, nil
@@ -6870,27 +6857,57 @@ func (r *Vault) Namespace(ctx context.Context) (string, error) {
 	return response, q.Execute(ctx, r.c)
 }
 
-// VaultTestGetSecretOpts contains options for Vault.TestGetSecret
-type VaultTestGetSecretOpts struct {
-	OpType string
+// Read returns a vault secret as a JSON string
+// this method corresponds to the Vault CLI command `vault read`
+func (r *Vault) Read(ctx context.Context, secret string) (string, error) {
+	if r.read != nil {
+		return *r.read, nil
+	}
+	q := r.q.Select("read")
+	q = q.Arg("secret", secret)
 
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+// TestKVGet is a test function for the GetSecretJSON function
+// example usage: dagger call test-write --host ${VAULT_ADDR} --namespace=${VAULT_NAMESPACE} --username=VAULT_USER --password=VAULT_PASSWORD --secret=secrets/hashitalks/creds/deployment
+func (r *Vault) TestKvget(ctx context.Context, host string, namespace string, username *Secret, password *Secret, secret string) (string, error) {
+	assertNotNil("username", username)
+	assertNotNil("password", password)
+	if r.testKvget != nil {
+		return *r.testKvget, nil
+	}
+	q := r.q.Select("testKvget")
+	q = q.Arg("host", host)
+	q = q.Arg("namespace", namespace)
+	q = q.Arg("username", username)
+	q = q.Arg("password", password)
+	q = q.Arg("secret", secret)
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+// VaultTestWriteOpts contains options for Vault.TestWrite
+type VaultTestWriteOpts struct {
 	Params string
 }
 
-// TestGetSecret is a test function for the GetSecretJSON function
-// example usage: dagger call test-get-secret --host ${VAULT_ADDR} --namespace=${VAULT_NAMESPACE} --username=VAULT_USER --password=VAULT_PASSWORD --secret=kubernetes/hashitalks/creds/deployer-default --params="kubernetes_namespace=default" --op-type=write
-func (r *Vault) TestGetSecret(ctx context.Context, host string, namespace string, username *Secret, password *Secret, secret string, opts ...VaultTestGetSecretOpts) (string, error) {
+// TestWrite is a test function for the GetSecretJSON function
+// example usage: dagger call test-write --host ${VAULT_ADDR} --namespace=${VAULT_NAMESPACE} --username=VAULT_USER --password=VAULT_PASSWORD --secret=kubernetes/hashitalks/creds/deployer-default --params="kubernetes_namespace=default"
+func (r *Vault) TestWrite(ctx context.Context, host string, namespace string, username *Secret, password *Secret, secret string, opts ...VaultTestWriteOpts) (string, error) {
 	assertNotNil("username", username)
 	assertNotNil("password", password)
-	if r.testGetSecret != nil {
-		return *r.testGetSecret, nil
+	if r.testWrite != nil {
+		return *r.testWrite, nil
 	}
-	q := r.q.Select("testGetSecret")
+	q := r.q.Select("testWrite")
 	for i := len(opts) - 1; i >= 0; i-- {
-		// `opType` optional argument
-		if !querybuilder.IsZeroValue(opts[i].OpType) {
-			q = q.Arg("opType", opts[i].OpType)
-		}
 		// `params` optional argument
 		if !querybuilder.IsZeroValue(opts[i].Params) {
 			q = q.Arg("params", opts[i].Params)
@@ -6933,7 +6950,8 @@ type VaultWithJwtauthOpts struct {
 	Path string
 }
 
-func (r *Vault) WithJwtauth(token string, role string, opts ...VaultWithJwtauthOpts) *Vault {
+func (r *Vault) WithJwtauth(token *Secret, role string, opts ...VaultWithJwtauthOpts) *Vault {
+	assertNotNil("token", token)
 	q := r.q.Select("withJwtauth")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `path` optional argument
@@ -6967,7 +6985,8 @@ type VaultWithUserpassAuthOpts struct {
 }
 
 // WithUserpassAuth sets the userpass autrhentication for the Vault client
-func (r *Vault) WithUserpassAuth(username string, password string, opts ...VaultWithUserpassAuthOpts) *Vault {
+func (r *Vault) WithUserpassAuth(username string, password *Secret, opts ...VaultWithUserpassAuthOpts) *Vault {
+	assertNotNil("password", password)
 	q := r.q.Select("withUserpassAuth")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `path` optional argument
@@ -6982,6 +7001,33 @@ func (r *Vault) WithUserpassAuth(username string, password string, opts ...Vault
 		q: q,
 		c: r.c,
 	}
+}
+
+// VaultWriteOpts contains options for Vault.Write
+type VaultWriteOpts struct {
+	Params string
+}
+
+// Write writes a vault secret and returns the response as a JSON string
+// this method corresponds to the Vault CLI command `vault write`
+// optional params can be passed as a comma separated list of key=value pairs
+func (r *Vault) Write(ctx context.Context, secret string, opts ...VaultWriteOpts) (string, error) {
+	if r.write != nil {
+		return *r.write, nil
+	}
+	q := r.q.Select("write")
+	for i := len(opts) - 1; i >= 0; i-- {
+		// `params` optional argument
+		if !querybuilder.IsZeroValue(opts[i].Params) {
+			q = q.Arg("params", opts[i].Params)
+		}
+	}
+	q = q.Arg("secret", secret)
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
 }
 
 type VaultJwtauth struct {

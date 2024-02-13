@@ -28,12 +28,14 @@ func (b *Build) FetchDaggerCloudToken(ctx context.Context, vaultAddr, vaultNames
 		return "", fmt.Errorf("failed to get GitHub OIDC token: %w", err)
 	}
 
+	jwt := dag.SetSecret("jwt", gitHubJWT)
+
 	vc := dag.Vault().
 		WithHost(vaultAddr).
 		WithNamespace(vaultNamespace).
-		WithJwtauth(gitHubJWT, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"})
+		WithJwtauth(jwt, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"})
 
-	js, err := vc.GetSecretJSON(ctx, "secrets/data/hashitalks/deployment")
+	js, err := vc.Kvget(ctx, "secrets/hashitalks/deployment")
 	if err != nil {
 		return "", err
 	}
@@ -95,9 +97,8 @@ func (b *Build) All(
 	if vaultUsername != nil && vaultPassword != nil {
 		// deploy the application
 		user, _ := vaultUsername.Plaintext(ctx)
-		pass, _ := vaultPassword.Plaintext(ctx)
 
-		secrets, err = b.fetchDeploymentSecretUserpass(ctx, vaultAddr, user, pass, vaultNamespace)
+		secrets, err = b.fetchDeploymentSecretUserpass(ctx, vaultAddr, user, vaultPassword, vaultNamespace)
 		if err != nil {
 			return fmt.Errorf("failed to fetch deployment secret:%w", err)
 		}
@@ -254,7 +255,7 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host
 	return nil
 }
 
-func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername, vaultPassword, vaultNamespace string) (VaultSecrets, error) {
+func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername string, vaultPassword *Secret, vaultNamespace string) (VaultSecrets, error) {
 	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
 
 	vc := dag.Vault().
@@ -262,7 +263,7 @@ func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 		WithNamespace(vaultNamespace).
 		WithUserpassAuth(vaultUsername, vaultPassword)
 
-	js, err := vc.GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
+	js, err := vc.Write(ctx, "kubernetes/hashitalks/creds/deployer-default")
 
 	if err != nil {
 		return VaultSecrets{}, err
@@ -281,7 +282,7 @@ func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 
 	// fetch the static secrets from Vault
 	fmt.Println("Fetch static secret from Vault...", vaultHost)
-	js, err = vc.GetSecretJSON(ctx, "secrets/data/hashitalks/deployment")
+	js, err = vc.Kvget(ctx, "secrets/hashitalks/deployment")
 
 	if err != nil {
 		return VaultSecrets{}, err
@@ -292,7 +293,6 @@ func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 		return VaultSecrets{}, err
 	}
 
-	data = data["data"].(map[string]interface{})
 	secrets.dockerUsername = data["docker_username"].(string)
 	secrets.dockerPassword = data["docker_password"].(string)
 	secrets.k8sAddr = data["kube_addr"].(string)
@@ -308,12 +308,14 @@ func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultN
 		return VaultSecrets{}, fmt.Errorf("failed to get GitHub OIDC token: %w", err)
 	}
 
+	jwt := dag.SetSecret("jwt", gitHubJWT)
+
 	vc := dag.Vault().
 		WithHost(vaultHost).
 		WithNamespace(vaultNamespace).
-		WithJwtauth(gitHubJWT, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"})
+		WithJwtauth(jwt, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"})
 
-	js, err := vc.GetSecretJSON(ctx, "kubernetes/hashitalks/creds/deployer-default", VaultGetSecretJSONOpts{OperationType: "write"})
+	js, err := vc.Write(ctx, "kubernetes/hashitalks/creds/deployer-default")
 
 	if err != nil {
 		return VaultSecrets{}, err
@@ -332,7 +334,7 @@ func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultN
 
 	// fetch the static secrets from Vault
 	fmt.Println("Fetch static secret from Vault...", vaultHost)
-	js, err = vc.GetSecretJSON(ctx, "secrets/data/hashitalks/deployment")
+	js, err = vc.Kvget(ctx, "secrets/hashitalks/deployment")
 
 	if err != nil {
 		return VaultSecrets{}, err
@@ -343,7 +345,6 @@ func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultN
 		return VaultSecrets{}, err
 	}
 
-	data = data["data"].(map[string]interface{})
 	secrets.dockerUsername = data["docker_username"].(string)
 	secrets.dockerPassword = data["docker_password"].(string)
 	secrets.k8sAddr = data["kube_addr"].(string)
