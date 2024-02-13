@@ -3,6 +3,10 @@
   "sdk": "go",
   "dependencies": [
     {
+      "name": "github",
+      "source": "github.com/jumppad-labs/daggerverse/github@cfdf2c075b5a7e404c62d1a23a27ad048fc7969c"
+    },
+    {
       "name": "vault",
       "source": "github.com/nicholasjackson/demo-dagger-vault/dagger/modules/vault@444f2dc370800c5e49d0d1e8d5cb29bc1aa1e820"
     }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 )
@@ -79,9 +77,7 @@ func (b *Build) All(
 	}
 
 	if actionsRequestToken != nil && actionsTokenURL != "" {
-		token, _ := actionsRequestToken.Plaintext(ctx)
-
-		secrets, err = b.fetchDeploymentSecretOIDC(ctx, vaultAddr, vaultNamespace, token, actionsTokenURL)
+		secrets, err = b.fetchDeploymentSecretOIDC(ctx, vaultAddr, vaultNamespace, actionsRequestToken, actionsTokenURL)
 		if err != nil {
 			return fmt.Errorf("failed to fetch deployment secret:%w", err)
 		}
@@ -277,38 +273,13 @@ func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 	return secrets, nil
 }
 
-func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultNamespace, actionsRequestToken, actionsTokenURL string) (VaultSecrets, error) {
+func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultNamespace string, actionsRequestToken *Secret, actionsTokenURL string) (VaultSecrets, error) {
 	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
 
-	rq, err := http.NewRequest(http.MethodGet, actionsTokenURL, nil)
+	gitHubJWT, err := dag.Github().GetOidctoken(ctx, actionsRequestToken, actionsTokenURL)
 	if err != nil {
-		return VaultSecrets{}, fmt.Errorf("unable to create request: %w", err)
+		return VaultSecrets{}, fmt.Errorf("failed to get GitHub OIDC token: %w", err)
 	}
-
-	// add the bearer token for the request
-	rq.Header.Add("Authorization", fmt.Sprintf("bearer %s", actionsRequestToken))
-
-	// make the request
-	resp, err := http.DefaultClient.Do(rq)
-	if err != nil {
-		return VaultSecrets{}, fmt.Errorf("unable to request token: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return VaultSecrets{}, fmt.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
-
-	// parse the response
-	data := map[string]interface{}{}
-
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return VaultSecrets{}, fmt.Errorf("unable to read response body: %w", err)
-	}
-
-	json.Unmarshal(body, &data)
-	gitHubJWT := data["value"].(string)
 
 	vc := dag.Vault().
 		WithHost(vaultHost).
@@ -322,6 +293,7 @@ func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultN
 	}
 
 	// unmarshal the secret into an object
+	data := map[string]interface{}{}
 	err = json.Unmarshal([]byte(js), &data)
 	if err != nil {
 		return VaultSecrets{}, err

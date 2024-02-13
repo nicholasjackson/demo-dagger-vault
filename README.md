@@ -181,7 +181,7 @@ kubectl apply -f ./src/kubernetes/deploy.yaml --server="${KUBE_HOST}" --token="$
 vault kv put secrets/hashitalks/deployment kube_addr=${KUBE_ADDR} docker_username=${DOCKER_USERNAME} docker_password=${DOCKER_PASSWORD}
 ```
 
-## Configure GitHub Actions to authenticate with Vault
+## Configure GitHub Actions to authenticate with Vault using OIDC
 
 https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-hashicorp-vault
 

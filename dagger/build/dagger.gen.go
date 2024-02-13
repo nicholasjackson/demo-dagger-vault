@@ -163,6 +163,9 @@ type GitRefID string
 // The `GitRepositoryID` scalar type represents an identifier for an object of type GitRepository.
 type GitRepositoryID string
 
+// The `GithubID` scalar type represents an identifier for an object of type Github.
+type GithubID string
+
 // The `InputTypeDefID` scalar type represents an identifier for an object of type InputTypeDef.
 type InputTypeDefID string
 
@@ -3526,6 +3529,219 @@ func (r *GitRepository) Tag(name string) *GitRef {
 	}
 }
 
+type Github struct {
+	q *querybuilder.Selection
+	c graphql.Client
+
+	createRelease                    *Void
+	ftestBumpVersionWithPrtag        *string
+	ftestCreateRelease               *Void
+	getOidctoken                     *string
+	id                               *GithubID
+	nextVersionFromAssociatedPrlabel *string
+	token                            *string
+}
+type WithGithubFunc func(r *Github) *Github
+
+// With calls the provided function with current Github.
+//
+// This is useful for reusability and readability by not breaking the calling chain.
+func (r *Github) With(f WithGithubFunc) *Github {
+	return f(r)
+}
+
+// GithubCreateReleaseOpts contains options for Github.CreateRelease
+type GithubCreateReleaseOpts struct {
+	Files *Directory
+}
+
+// TagRepository creates a tag for a repository with the given commit sha and an optional list of files
+// note: only the top level files in the directory will be uploaded, this function does not support subdirectories
+func (r *Github) CreateRelease(ctx context.Context, owner string, repo string, tag string, sha string, opts ...GithubCreateReleaseOpts) (Void, error) {
+	if r.createRelease != nil {
+		return *r.createRelease, nil
+	}
+	q := r.q.Select("createRelease")
+	for i := len(opts) - 1; i >= 0; i-- {
+		// `files` optional argument
+		if !querybuilder.IsZeroValue(opts[i].Files) {
+			q = q.Arg("files", opts[i].Files)
+		}
+	}
+	q = q.Arg("owner", owner)
+	q = q.Arg("repo", repo)
+	q = q.Arg("tag", tag)
+	q = q.Arg("sha", sha)
+
+	var response Void
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+// example: dagger call ftest-bump-version-with-prtag --token=GITHUB_TOKEN
+func (r *Github) FtestBumpVersionWithPrtag(ctx context.Context, token *Secret) (string, error) {
+	assertNotNil("token", token)
+	if r.ftestBumpVersionWithPrtag != nil {
+		return *r.ftestBumpVersionWithPrtag, nil
+	}
+	q := r.q.Select("ftestBumpVersionWithPrtag")
+	q = q.Arg("token", token)
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+// GithubFtestCreateReleaseOpts contains options for Github.FtestCreateRelease
+type GithubFtestCreateReleaseOpts struct {
+	Files *Directory
+}
+
+// example: dagger call ftest-create-release --token=GITHUB_TOKEN --files=./testfiles
+func (r *Github) FtestCreateRelease(ctx context.Context, token *Secret, opts ...GithubFtestCreateReleaseOpts) (Void, error) {
+	assertNotNil("token", token)
+	if r.ftestCreateRelease != nil {
+		return *r.ftestCreateRelease, nil
+	}
+	q := r.q.Select("ftestCreateRelease")
+	for i := len(opts) - 1; i >= 0; i-- {
+		// `files` optional argument
+		if !querybuilder.IsZeroValue(opts[i].Files) {
+			q = q.Arg("files", opts[i].Files)
+		}
+	}
+	q = q.Arg("token", token)
+
+	var response Void
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+// GetOIDCToken returns an OpenID Connect (OIDC) token for the current run in GitHubActions
+// When a actions run has the `id-token: write` permission, it can request an OIDC token for the current run
+// the parameters actionsRequestToken and actionsTokenURL are provided by the GitHubActions environment
+// variables `ACTIONS_ID_TOKEN_REQUEST_TOKEN` and `ACTIONS_ID_TOKEN_REQUEST_URL`.
+//
+// example actions config to enable OIDC tokens:
+// jobs:
+//
+//	build:
+//	  runs-on: ubuntu-latest
+//	  permissions:
+//	    id-token: write
+//	    contents: read
+func (r *Github) GetOidctoken(ctx context.Context, actionsRequestToken *Secret, actionsTokenUrl string) (string, error) {
+	assertNotNil("actionsRequestToken", actionsRequestToken)
+	if r.getOidctoken != nil {
+		return *r.getOidctoken, nil
+	}
+	q := r.q.Select("getOidctoken")
+	q = q.Arg("actionsRequestToken", actionsRequestToken)
+	q = q.Arg("actionsTokenUrl", actionsTokenUrl)
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+// A unique identifier for this Github.
+func (r *Github) ID(ctx context.Context) (GithubID, error) {
+	if r.id != nil {
+		return *r.id, nil
+	}
+	q := r.q.Select("id")
+
+	var response GithubID
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+// XXX_GraphQLType is an internal function. It returns the native GraphQL type name
+func (r *Github) XXX_GraphQLType() string {
+	return "Github"
+}
+
+// XXX_GraphQLIDType is an internal function. It returns the native GraphQL type name for the ID of this object
+func (r *Github) XXX_GraphQLIDType() string {
+	return "GithubID"
+}
+
+// XXX_GraphQLID is an internal function. It returns the underlying type ID
+func (r *Github) XXX_GraphQLID(ctx context.Context) (string, error) {
+	id, err := r.ID(ctx)
+	if err != nil {
+		return "", err
+	}
+	return string(id), nil
+}
+
+func (r *Github) MarshalJSON() ([]byte, error) {
+	id, err := r.ID(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(id)
+}
+func (r *Github) UnmarshalJSON(bs []byte) error {
+	var id string
+	err := json.Unmarshal(bs, &id)
+	if err != nil {
+		return err
+	}
+	*r = *dag.LoadGithubFromID(GithubID(id))
+	return nil
+}
+
+// NextVersionFromAssociatedPRLabel returns a the next semantic version based on the presence of a PR label
+// for the given commit SHA.
+// If there are multiple PRs associated with the commit, the highest label from any matching PR will be used
+//
+// i.e. if the SHA has an associated PR with a label of `major` and the current tag is `1.1.2` the next version will be `2.0.0`
+// if the PR has a tag of `minor` and the current tag is `1.1.2` the next version will be `1.2.0`
+// if the PR has a tag of `patch` and the current tag is `1.1.2` the next version will be `1.1.3`
+func (r *Github) NextVersionFromAssociatedPrlabel(ctx context.Context, owner string, repo string, sha string) (string, error) {
+	if r.nextVersionFromAssociatedPrlabel != nil {
+		return *r.nextVersionFromAssociatedPrlabel, nil
+	}
+	q := r.q.Select("nextVersionFromAssociatedPrlabel")
+	q = q.Arg("owner", owner)
+	q = q.Arg("repo", repo)
+	q = q.Arg("sha", sha)
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+func (r *Github) Token(ctx context.Context) (string, error) {
+	if r.token != nil {
+		return *r.token, nil
+	}
+	q := r.q.Select("token")
+
+	var response string
+
+	q = q.Bind(&response)
+	return response, q.Execute(ctx, r.c)
+}
+
+// WithToken sets the GithHub token for any opeations that require it
+func (r *Github) WithToken(token string) *Github {
+	q := r.q.Select("withToken")
+	q = q.Arg("token", token)
+
+	return &Github{
+		q: q,
+		c: r.c,
+	}
+}
+
 // A graphql input type, which is essentially just a group of named args.
 // This is currently only used to represent pre-existing usage of graphql input types
 // in the core API. It is not used by user modules and shouldn't ever be as user
@@ -5307,6 +5523,15 @@ func (r *Client) Git(url string, opts ...GitOpts) *GitRepository {
 	}
 }
 
+func (r *Client) Github() *Github {
+	q := r.q.Select("github")
+
+	return &Github{
+		q: q,
+		c: r.c,
+	}
+}
+
 // HTTPOpts contains options for Client.HTTP
 type HTTPOpts struct {
 	// A service which must be started before the URL is fetched.
@@ -5490,6 +5715,17 @@ func (r *Client) LoadGitRepositoryFromID(id GitRepositoryID) *GitRepository {
 	q = q.Arg("id", id)
 
 	return &GitRepository{
+		q: q,
+		c: r.c,
+	}
+}
+
+// Load a Github from its ID.
+func (r *Client) LoadGithubFromID(id GithubID) *Github {
+	q := r.q.Select("loadGithubFromID")
+	q = q.Arg("id", id)
+
+	return &Github{
 		q: q,
 		c: r.c,
 	}
