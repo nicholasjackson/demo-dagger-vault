@@ -251,8 +251,22 @@ vault write auth/jwt/circleci/config \
   oidc_discovery_url="https://oidc.circleci.com/org/4d554158-1b10-47cd-9a2e-69fa57965e06"
 ```
 
+Next you need to create a policy that will enable the authenticated user to access the deployer role
+
+```shell
+vault policy write kubernetes-deployer - <<EOF
+path "kubernetes/hashitalks/creds/deployer-default" {
+  capabilities = [ "create", "update" ]
+}
+
+path "secrets/data/hashitalks/deployment" {
+  capabilities = [ "read" ]
+}
+EOF
+```
+
 Finally create a roll that bind the presented token to the policy, note the `repository` in the 
-bound claims. This claim is automatically added by the GitHub OIDC service.
+bound claims. This claim is automatically added by the CircleCI OIDC service.
 
 ```shell
 vault write auth/jwt/circleci/role/hashitalks-deployer -<<EOF
