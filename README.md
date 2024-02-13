@@ -246,9 +246,26 @@ vault auth enable --path=jwt/circleci jwt
 Then configure the endpoint to be able to validate GitHub tokens
 
 ```shell
-vault write auth/jwt/github/config \
+vault write auth/jwt/circleci/config \
   bound_issuer="https://oidc.circleci.com/org/4d554158-1b10-47cd-9a2e-69fa57965e06" \
-  oidc_discovery_url="https://token.actions.githubusercontent.com"
+  oidc_discovery_url="https://oidc.circleci.com/org/4d554158-1b10-47cd-9a2e-69fa57965e06"
+```
+
+Finally create a roll that bind the presented token to the policy, note the `repository` in the 
+bound claims. This claim is automatically added by the GitHub OIDC service.
+
+```shell
+vault write auth/jwt/circleci/role/hashitalks-deployer -<<EOF
+{
+  "role_type": "jwt",
+  "user_claim": "aud",
+  "bound_claims": {
+    "oidc.circleci.com/vcs-origin": "github.com/nicholasjackson/demo-dagger-vault"
+  },
+  "policies": ["kubernetes-deployer"],
+  "ttl": "10m"
+}
+EOF
 ```
 
 ## Todo
