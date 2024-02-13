@@ -177,8 +177,10 @@ kubectl apply -f ./src/kubernetes/deploy.yaml --server="${KUBE_HOST}" --token="$
 
 ## Create static secrets for the deployment
 
+The following command will create a static secret in Vault that can be used to deploy the application.
+
 ```shell
-vault kv put secrets/hashitalks/deployment kube_addr=${KUBE_ADDR} docker_username=${DOCKER_USERNAME} docker_password=${DOCKER_PASSWORD}
+vault kv put secrets/hashitalks/deployment kube_addr=${KUBE_ADDR} docker_username=${DOCKER_USERNAME} docker_password=${DOCKER_PASSWORD} dagger_cloud_token=${DAGGER_CLOUD_TOKEN}
 ```
 
 ## Configure GitHub Actions to authenticate with Vault using OIDC

@@ -7414,6 +7414,41 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 	switch parentName {
 	case "Build":
 		switch fnName {
+		case "FetchDaggerCloudToken":
+			var parent Build
+			err = json.Unmarshal(parentJSON, &parent)
+			if err != nil {
+				panic(fmt.Errorf("%s: %w", "failed to unmarshal parent object", err))
+			}
+			var vaultAddr string
+			if inputArgs["vaultAddr"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["vaultAddr"]), &vaultAddr)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultAddr", err))
+				}
+			}
+			var vaultNamespace string
+			if inputArgs["vaultNamespace"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["vaultNamespace"]), &vaultNamespace)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg vaultNamespace", err))
+				}
+			}
+			var actionsRequestToken *Secret
+			if inputArgs["actionsRequestToken"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["actionsRequestToken"]), &actionsRequestToken)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg actionsRequestToken", err))
+				}
+			}
+			var actionsTokenUrl string
+			if inputArgs["actionsTokenURL"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["actionsTokenURL"]), &actionsTokenUrl)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg actionsTokenURL", err))
+				}
+			}
+			return (*Build).FetchDaggerCloudToken(&parent, ctx, vaultAddr, vaultNamespace, actionsRequestToken, actionsTokenUrl)
 		case "All":
 			var parent Build
 			err = json.Unmarshal(parentJSON, &parent)
@@ -7582,6 +7617,14 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 		return dag.Module().
 			WithObject(
 				dag.TypeDef().WithObject("Build").
+					WithFunction(
+						dag.Function("FetchDaggerCloudToken",
+							dag.TypeDef().WithKind(StringKind)).
+							WithDescription("FetchDaggerCloudToken fetches the Dagger Cloud API token from Vault.").
+							WithArg("vaultAddr", dag.TypeDef().WithKind(StringKind)).
+							WithArg("vaultNamespace", dag.TypeDef().WithKind(StringKind)).
+							WithArg("actionsRequestToken", dag.TypeDef().WithObject("Secret")).
+							WithArg("actionsTokenURL", dag.TypeDef().WithKind(StringKind))).
 					WithFunction(
 						dag.Function("All",
 							dag.TypeDef().WithKind(VoidKind).WithOptional(true)).

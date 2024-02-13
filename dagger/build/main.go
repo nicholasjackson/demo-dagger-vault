@@ -21,6 +21,33 @@ type VaultSecrets struct {
 type Build struct {
 }
 
+// FetchDaggerCloudToken fetches the Dagger Cloud API token from Vault.
+func (b *Build) FetchDaggerCloudToken(ctx context.Context, vaultAddr, vaultNamespace string, actionsRequestToken *Secret, actionsTokenURL string) (string, error) {
+	gitHubJWT, err := dag.Github().GetOidctoken(ctx, actionsRequestToken, actionsTokenURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to get GitHub OIDC token: %w", err)
+	}
+
+	vc := dag.Vault().
+		WithHost(vaultAddr).
+		WithNamespace(vaultNamespace).
+		WithJwtauth(gitHubJWT, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"})
+
+	js, err := vc.GetSecretJSON(ctx, "secrets/data/hashitalks/deployment")
+	if err != nil {
+		return "", err
+	}
+
+	// unmarshal the secret into an object
+	data := map[string]interface{}{}
+	err = json.Unmarshal([]byte(js), &data)
+	if err != nil {
+		return "", err
+	}
+
+	return data["dagger_cloud_token"].(string), nil
+}
+
 // All runs the unit tests, builds the application, packages it in a container, and pushes it to the registry.
 // It also fetches a secret from Vault and deploys the application to Kubernetes.
 //
