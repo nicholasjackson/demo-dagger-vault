@@ -21,28 +21,6 @@ type VaultSecrets struct {
 type Build struct {
 }
 
-func (b *Build) getJWTAuthDetails(ctx context.Context, actionsRequestToken *Secret, actionsTokenURL string, circleCIOIDCToken *Secret) (*Secret, string) {
-	authPath := ""
-	var jwt *Secret
-
-	if actionsRequestToken != nil && actionsTokenURL != "" {
-		authPath = "jwt/github"
-		gitHubJWT, err := dag.Github().GetOidctoken(ctx, actionsRequestToken, actionsTokenURL)
-		if err != nil {
-			return nil, ""
-		}
-
-		jwt = dag.SetSecret("jwt", gitHubJWT)
-	}
-
-	if circleCIOIDCToken != nil {
-		authPath = "jwt/circleci"
-		jwt = circleCIOIDCToken
-	}
-
-	return jwt, authPath
-}
-
 // FetchDaggerCloudToken fetches the Dagger Cloud API token from Vault.
 func (b *Build) FetchDaggerCloudToken(
 	ctx context.Context,
@@ -393,4 +371,26 @@ func (d *Build) getGitSHA(ctx context.Context, src *Directory) (string, error) {
 	}
 
 	return strings.TrimSpace(ref), nil
+}
+
+func (b *Build) getJWTAuthDetails(ctx context.Context, actionsRequestToken *Secret, actionsTokenURL string, circleCIOIDCToken *Secret) (*Secret, string) {
+	authPath := ""
+	var jwt *Secret
+
+	if actionsRequestToken != nil && actionsTokenURL != "" {
+		authPath = "jwt/github"
+		gitHubJWT, err := dag.Github().GetOidctoken(ctx, actionsRequestToken, actionsTokenURL)
+		if err != nil {
+			return nil, ""
+		}
+
+		jwt = dag.SetSecret("jwt", gitHubJWT)
+	}
+
+	if circleCIOIDCToken != nil {
+		authPath = "jwt/circleci"
+		jwt = circleCIOIDCToken
+	}
+
+	return jwt, authPath
 }
