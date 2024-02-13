@@ -100,8 +100,8 @@ func (b *Build) All(
 
 	var secrets VaultSecrets
 
+	// fetch the vault secrets using the vault userpass
 	if vaultUsername != nil && vaultPassword != nil {
-		// deploy the application
 		user, _ := vaultUsername.Plaintext(ctx)
 
 		secrets, err = b.fetchDeploymentSecretUserpass(ctx, vaultAddr, user, vaultPassword, vaultNamespace)
@@ -110,6 +110,7 @@ func (b *Build) All(
 		}
 	}
 
+	// fetch the vault secrets using the vault oidc auth
 	if (actionsRequestToken != nil && actionsTokenURL != "") || circleCIOIDCToken != nil {
 		jwt, authPath := b.getJWTAuthDetails(ctx, actionsRequestToken, actionsTokenURL, circleCIOIDCToken)
 
