@@ -21,6 +21,28 @@ type VaultSecrets struct {
 type Build struct {
 }
 
+func (b *Build) getJWTAuthDetails(ctx context.Context, actionsRequestToken *Secret, actionsTokenURL string, circleCIOIDCToken *Secret) (*Secret, string) {
+	authPath := ""
+	var jwt *Secret
+
+	if actionsRequestToken != nil && actionsTokenURL != "" {
+		authPath = "jwt/github"
+		gitHubJWT, err := dag.Github().GetOidctoken(ctx, actionsRequestToken, actionsTokenURL)
+		if err != nil {
+			return nil, ""
+		}
+
+		jwt = dag.SetSecret("jwt", gitHubJWT)
+	}
+
+	if circleCIOIDCToken != nil {
+		authPath = "jwt/circleci"
+		jwt = circleCIOIDCToken
+	}
+
+	return jwt, authPath
+}
+
 // FetchDaggerCloudToken fetches the Dagger Cloud API token from Vault.
 func (b *Build) FetchDaggerCloudToken(
 	ctx context.Context,
@@ -32,24 +54,7 @@ func (b *Build) FetchDaggerCloudToken(
 	// +optional
 	circleCIOIDCToken *Secret,
 ) (string, error) {
-
-	authPath := ""
-	var jwt *Secret
-
-	if actionsRequestToken != nil && actionsTokenURL != "" {
-		authPath = "jwt/github"
-		gitHubJWT, err := dag.Github().GetOidctoken(ctx, actionsRequestToken, actionsTokenURL)
-		if err != nil {
-			return "", fmt.Errorf("failed to get GitHub OIDC token: %w", err)
-		}
-
-		jwt = dag.SetSecret("jwt", gitHubJWT)
-	}
-
-	if circleCIOIDCToken != nil {
-		authPath = "jwt/circleci"
-		jwt = circleCIOIDCToken
-	}
+	jwt, authPath := b.getJWTAuthDetails(ctx, actionsRequestToken, actionsTokenURL, circleCIOIDCToken)
 
 	vc := dag.Vault().
 		WithHost(vaultAddr).
@@ -127,8 +132,10 @@ func (b *Build) All(
 		}
 	}
 
-	if actionsRequestToken != nil && actionsTokenURL != "" {
-		secrets, err = b.fetchDeploymentSecretOIDC(ctx, vaultAddr, vaultNamespace, actionsRequestToken, actionsTokenURL)
+	if (actionsRequestToken != nil && actionsTokenURL != "") || circleCIOIDCToken != nil {
+		jwt, authPath := b.getJWTAuthDetails(ctx, actionsRequestToken, actionsTokenURL, circleCIOIDCToken)
+
+		secrets, err = b.fetchDeploymentSecretOIDC(ctx, vaultAddr, vaultNamespace, jwt, authPath)
 		if err != nil {
 			return fmt.Errorf("failed to fetch deployment secret:%w", err)
 		}
@@ -323,20 +330,13 @@ func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 	return secrets, nil
 }
 
-func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultNamespace string, actionsRequestToken *Secret, actionsTokenURL string) (VaultSecrets, error) {
+func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultNamespace string, jwt *Secret, jwtAuthPath string) (VaultSecrets, error) {
 	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
-
-	gitHubJWT, err := dag.Github().GetOidctoken(ctx, actionsRequestToken, actionsTokenURL)
-	if err != nil {
-		return VaultSecrets{}, fmt.Errorf("failed to get GitHub OIDC token: %w", err)
-	}
-
-	jwt := dag.SetSecret("jwt", gitHubJWT)
 
 	vc := dag.Vault().
 		WithHost(vaultHost).
 		WithNamespace(vaultNamespace).
-		WithJwtauth(jwt, "hashitalks-deployer", VaultWithJwtauthOpts{Path: "jwt/github"})
+		WithJwtauth(jwt, "hashitalks-deployer", VaultWithJwtauthOpts{Path: jwtAuthPath})
 
 	js, err := vc.Write(ctx, "kubernetes/hashitalks/creds/deployer-default")
 
