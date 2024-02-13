@@ -90,6 +90,8 @@ func (b *Build) All(
 	actionsRequestToken *Secret,
 	// +optional
 	actionsTokenURL string,
+	// +optional
+	circleCIOIDCToken *Secret,
 ) error {
 	if vaultAddr == "" {
 		return fmt.Errorf("vault address is required")

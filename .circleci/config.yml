@@ -17,7 +17,7 @@ jobs:
               call fetch-dagger-cloud-token \
               --vault-addr="https://vault-cluster-public-vault-0bbbdae6.9eb86982.z1.hashicorp.cloud:8200/" \
               --vault-namespace="/admin/dev" \
-              --circleci-request-token=CIRCLE_OIDC_TOKEN_V2 \
+              --circle-cioidctoken=CIRCLE_OIDC_TOKEN_V2 \
               --output=./.dagger-cloud-token
 
 workflows:

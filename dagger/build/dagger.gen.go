@@ -7557,7 +7557,14 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg actionsTokenURL", err))
 				}
 			}
-			return nil, (*Build).All(&parent, ctx, src, vaultAddr, vaultNamespace, vaultUsername, vaultPassword, actionsRequestToken, actionsTokenUrl)
+			var circleCioidctoken *Secret
+			if inputArgs["circleCIOIDCToken"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["circleCIOIDCToken"]), &circleCioidctoken)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg circleCIOIDCToken", err))
+				}
+			}
+			return nil, (*Build).All(&parent, ctx, src, vaultAddr, vaultNamespace, vaultUsername, vaultPassword, actionsRequestToken, actionsTokenUrl, circleCioidctoken)
 		case "UnitTest":
 			var parent Build
 			err = json.Unmarshal(parentJSON, &parent)
@@ -7689,7 +7696,8 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 							WithArg("vaultUsername", dag.TypeDef().WithObject("Secret").WithOptional(true)).
 							WithArg("vaultPassword", dag.TypeDef().WithObject("Secret").WithOptional(true)).
 							WithArg("actionsRequestToken", dag.TypeDef().WithObject("Secret").WithOptional(true)).
-							WithArg("actionsTokenURL", dag.TypeDef().WithKind(StringKind).WithOptional(true))).
+							WithArg("actionsTokenURL", dag.TypeDef().WithKind(StringKind).WithOptional(true)).
+							WithArg("circleCIOIDCToken", dag.TypeDef().WithObject("Secret").WithOptional(true))).
 					WithFunction(
 						dag.Function("UnitTest",
 							dag.TypeDef().WithKind(VoidKind).WithOptional(true)).
