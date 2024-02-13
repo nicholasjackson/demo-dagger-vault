@@ -233,6 +233,24 @@ vault write auth/jwt/github/role/hashitalks-deployer -<<EOF
 EOF
 ```
 
+## Configure CircleCI to authenticate with Vault using OIDC
+
+https://circleci.com/docs/openid-connect-tokens/
+
+First enable the JWT endpoint
+
+```shell
+vault auth enable --path=jwt/circleci jwt
+```
+
+Then configure the endpoint to be able to validate GitHub tokens
+
+```shell
+vault write auth/jwt/github/config \
+  bound_issuer="https://oidc.circleci.com/org/4d554158-1b10-47cd-9a2e-69fa57965e06" \
+  oidc_discovery_url="https://token.actions.githubusercontent.com"
+```
+
 ## Todo
 
 - [x] Create a Vault server
