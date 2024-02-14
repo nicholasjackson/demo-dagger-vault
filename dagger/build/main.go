@@ -12,10 +12,10 @@ var arches = []string{"amd64", "arm64"}
 var dockerImage = "nicholasjackson/hashitalks2024"
 
 type VaultSecrets struct {
-	k8sAccessToken string
+	k8sAccessToken *Secret
 	k8sAddr        string
 	dockerUsername string
-	dockerPassword string
+	dockerPassword *Secret
 }
 
 type Build struct {
@@ -39,14 +39,15 @@ func (b *Build) FetchDaggerCloudToken(
 		WithNamespace(vaultNamespace).
 		WithJwtauth(jwt, "hashitalks-deployer", VaultWithJwtauthOpts{Path: authPath})
 
-	js, err := vc.Kvget(ctx, "secrets/hashitalks/deployment")
-	if err != nil {
-		return "", err
+	jsSecret := vc.Kvget("secrets/hashitalks/deployment")
+	if jsSecret == nil {
+		return "", fmt.Errorf("failed to fetch secret")
 	}
 
 	// unmarshal the secret into an object
+	js, _ := jsSecret.Plaintext(ctx)
 	data := map[string]interface{}{}
-	err = json.Unmarshal([]byte(js), &data)
+	err := json.Unmarshal([]byte(js), &data)
 	if err != nil {
 		return "", err
 	}
@@ -135,12 +136,14 @@ func (b *Build) All(
 }
 
 func (d *Build) UnitTest(ctx context.Context, src *Directory, withRace bool) error {
+	cli := dag.Pipeline("unit-test")
+
 	raceFlag := ""
 	if withRace {
 		raceFlag = "-race"
 	}
 
-	golang := dag.Container().
+	golang := cli.Container().
 		From("golang:latest").
 		WithDirectory("/files", src).
 		WithMountedCache("/go/pkg/mod", d.goCache()).
@@ -153,13 +156,13 @@ func (d *Build) UnitTest(ctx context.Context, src *Directory, withRace bool) err
 }
 
 func (d *Build) Build(ctx context.Context, src *Directory) (*Directory, error) {
-	fmt.Println("Building...")
+	cli := dag.Pipeline("build")
 
 	// create empty directory to put build outputs
 	outputs := dag.Directory()
 
 	// get `golang` image
-	golang := dag.Container().
+	golang := cli.Container().
 		From("golang:latest").
 		WithDirectory("/files", src).
 		WithWorkdir("/files/src").
@@ -190,8 +193,10 @@ func (d *Build) Build(ctx context.Context, src *Directory) (*Directory, error) {
 	return outputs, nil
 }
 
-func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha string, dockerUsername, dockerPassword string) error {
+func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha, dockerUsername string, dockerPassword *Secret) error {
 	fmt.Println("Building Docker image...")
+
+	cli := dag.Pipeline("docker-build")
 
 	platormVariants := []*Container{}
 
@@ -201,7 +206,7 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha stri
 		path := fmt.Sprintf("/build/linux/%s/app", goarch)
 
 		// get `docker` image
-		docker := dag.Container(ContainerOpts{Platform: Platform(fmt.Sprintf("linux/%s", goarch))}).
+		docker := cli.Container(ContainerOpts{Platform: Platform(fmt.Sprintf("linux/%s", goarch))}).
 			From("alpine:latest").
 			WithFile("/bin/app", bin.File(path)).
 			WithExec([]string{"chmod", "+x", "/bin/app", "."}).
@@ -210,11 +215,9 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha stri
 		platormVariants = append(platormVariants, docker)
 	}
 
-	secret := dag.SetSecret("dockerpassword", dockerPassword)
-
 	// push the images to the registry
-	digest, err := dag.Container().
-		WithRegistryAuth("docker.io", dockerUsername, secret).
+	digest, err := cli.Container().
+		WithRegistryAuth("docker.io", dockerUsername, dockerPassword).
 		Publish(
 			ctx,
 			fmt.Sprintf("%s:%s", dockerImage, sha),
@@ -231,8 +234,10 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha stri
 	return nil
 }
 
-func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host string, deployment *File) error {
+func (d *Build) DeployToKubernetes(ctx context.Context, sha string, token *Secret, host string, deployment *File) error {
 	fmt.Println("Deploy to Kubernetes...", host, sha)
+
+	cli := dag.Pipeline("deploy-to-kubernetes")
 
 	// get the contents of the deployment template
 	dStr, err := deployment.Contents(ctx)
@@ -242,16 +247,17 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host
 
 	// replace the image and write the new deployment file
 	newDep := strings.ReplaceAll(string(dStr), "##DOCKER_IMAGE##", fmt.Sprintf("%s:%s", dockerImage, sha))
-	df := dag.Directory().WithNewFile("deploy.yaml", newDep)
+	df := cli.Directory().WithNewFile("deploy.yaml", newDep)
 
-	out, err := dag.Container().
+	out, err := cli.Container().
 		From("bitnami/kubectl").
 		WithDirectory("/files", df).
 		WithEnvVariable("CACHE_INVALIDATE", time.Now().String()).
+		WithSecretVariable("KUBE_TOKEN", token).
 		WithExec([]string{
 			"apply",
 			"-f", "/files/deploy.yaml",
-			"--token", secret,
+			"--token", "$KUBE_TOKEN",
 			"--server", host,
 			"--insecure-skip-tls-verify",
 		}).Stdout(ctx)
@@ -267,79 +273,84 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, secret, host
 func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername string, vaultPassword *Secret, vaultNamespace string) (VaultSecrets, error) {
 	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
 
-	vc := dag.Vault().
+	cli := dag.Pipeline("fetch-deployment-secret-userpass")
+
+	vc := cli.Vault().
 		WithHost(vaultHost).
 		WithNamespace(vaultNamespace).
 		WithUserpassAuth(vaultUsername, vaultPassword)
 
-	js, err := vc.Write(ctx, "kubernetes/hashitalks/creds/deployer-default")
-
-	if err != nil {
-		return VaultSecrets{}, err
+	jsSecret := vc.Write("kubernetes/hashitalks/creds/deployer-default")
+	if jsSecret == nil {
+		return VaultSecrets{}, fmt.Errorf("failed to fetch deployment secret")
 	}
 
-	// unmarshal the secret into an object
+	js, _ := jsSecret.Plaintext(ctx)
 	data := map[string]interface{}{}
-	err = json.Unmarshal([]byte(js), &data)
+	err := json.Unmarshal([]byte(js), &data)
 	if err != nil {
 		return VaultSecrets{}, err
 	}
 
-	secrets := VaultSecrets{
-		k8sAccessToken: data["service_account_token"].(string),
-	}
+	token := cli.SetSecret("access-token", data["service_account_token"].(string))
 
 	// fetch the static secrets from Vault
 	fmt.Println("Fetch static secret from Vault...", vaultHost)
-	js, err = vc.Kvget(ctx, "secrets/hashitalks/deployment")
+	jsSecret = vc.Kvget("secrets/hashitalks/deployment")
 
-	if err != nil {
-		return VaultSecrets{}, err
+	if jsSecret == nil {
+		return VaultSecrets{}, fmt.Errorf("failed to fetch static secrets")
 	}
 
+	js, _ = jsSecret.Plaintext(ctx)
 	err = json.Unmarshal([]byte(js), &data)
 	if err != nil {
 		return VaultSecrets{}, err
 	}
 
-	secrets.dockerUsername = data["docker_username"].(string)
-	secrets.dockerPassword = data["docker_password"].(string)
-	secrets.k8sAddr = data["kube_addr"].(string)
+	dockerPassword := cli.SetSecret("dockerPassword", data["docker_password"].(string))
+
+	secrets := VaultSecrets{
+		k8sAccessToken: token,
+		k8sAddr:        data["kube_addr"].(string),
+		dockerUsername: data["docker_username"].(string),
+		dockerPassword: dockerPassword,
+	}
 
 	return secrets, nil
 }
 
 func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultNamespace string, jwt *Secret, jwtAuthPath string) (VaultSecrets, error) {
-	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
+	cli := dag.Pipeline("fetch-deployment-secret-oidc")
 
-	vc := dag.Vault().
+	vc := cli.Vault().
 		WithHost(vaultHost).
 		WithNamespace(vaultNamespace).
 		WithJwtauth(jwt, "hashitalks-deployer", VaultWithJwtauthOpts{Path: jwtAuthPath})
 
-	js, err := vc.Write(ctx, "kubernetes/hashitalks/creds/deployer-default")
-
-	if err != nil {
-		return VaultSecrets{}, err
+	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
+	jsSecret := vc.Write("kubernetes/hashitalks/creds/deployer-default")
+	if jsSecret == nil {
+		return VaultSecrets{}, fmt.Errorf("failed to fetch deployment secret")
 	}
+
+	js, _ := jsSecret.Plaintext(ctx)
 
 	// unmarshal the secret into an object
 	data := map[string]interface{}{}
-	err = json.Unmarshal([]byte(js), &data)
+	err := json.Unmarshal([]byte(js), &data)
 	if err != nil {
 		return VaultSecrets{}, err
 	}
 
-	secrets := VaultSecrets{
-		k8sAccessToken: data["service_account_token"].(string),
-	}
+	// set the k8s access token as a secret so that it does not leak
+	token := cli.SetSecret("access-token", data["service_account_token"].(string))
 
 	// fetch the static secrets from Vault
 	fmt.Println("Fetch static secret from Vault...", vaultHost)
-	js, err = vc.Kvget(ctx, "secrets/hashitalks/deployment")
-
-	if err != nil {
-		return VaultSecrets{}, err
+	jsSecret = vc.Kvget("secrets/hashitalks/deployment")
+	if jsSecret == nil {
+		return VaultSecrets{}, fmt.Errorf("failed to fetch static secrets")
 	}
 
 	err = json.Unmarshal([]byte(js), &data)
@@ -347,9 +358,15 @@ func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultN
 		return VaultSecrets{}, err
 	}
 
-	secrets.dockerUsername = data["docker_username"].(string)
-	secrets.dockerPassword = data["docker_password"].(string)
-	secrets.k8sAddr = data["kube_addr"].(string)
+	// set the docker password as a secret so that it does not leak
+	dockerPassword := cli.SetSecret("dockerPassword", data["docker_password"].(string))
+
+	secrets := VaultSecrets{
+		k8sAccessToken: token,
+		k8sAddr:        data["kube_addr"].(string),
+		dockerUsername: data["docker_username"].(string),
+		dockerPassword: dockerPassword,
+	}
 
 	return secrets, nil
 }
@@ -359,8 +376,10 @@ func (d *Build) goCache() *CacheVolume {
 }
 
 func (d *Build) getGitSHA(ctx context.Context, src *Directory) (string, error) {
+	cli := dag.Pipeline("get-git-sha")
+
 	// get the latest git sha from the source
-	ref, err := dag.Container().
+	ref, err := cli.Container().
 		From("alpine/git").
 		WithDirectory("/src", src).
 		WithWorkdir("/src").
@@ -375,17 +394,19 @@ func (d *Build) getGitSHA(ctx context.Context, src *Directory) (string, error) {
 }
 
 func (b *Build) getJWTAuthDetails(ctx context.Context, actionsRequestToken *Secret, actionsTokenURL string, circleCIOIDCToken *Secret) (*Secret, string) {
+	cli := dag.Pipeline("get-jwt-auth-details")
+
 	authPath := ""
 	var jwt *Secret
 
 	if actionsRequestToken != nil && actionsTokenURL != "" {
 		authPath = "jwt/github"
-		gitHubJWT, err := dag.Github().GetOidctoken(ctx, actionsRequestToken, actionsTokenURL)
+		gitHubJWT, err := cli.Github().GetOidctoken(ctx, actionsRequestToken, actionsTokenURL)
 		if err != nil {
 			return nil, ""
 		}
 
-		jwt = dag.SetSecret("jwt", gitHubJWT)
+		jwt = cli.SetSecret("jwt", gitHubJWT)
 	}
 
 	if circleCIOIDCToken != nil {

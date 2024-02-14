@@ -1,6 +1,0 @@
-{
-  "name": "vault",
-  "sdk": "go",
-  "source": ".",
-  "engineVersion": "v0.9.9"
-}

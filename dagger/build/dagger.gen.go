@@ -6744,12 +6744,9 @@ type Vault struct {
 
 	host      *string
 	id        *VaultID
-	kvget     *string
 	namespace *string
-	read      *string
 	testKvget *string
 	testWrite *string
-	write     *string
 }
 type WithVaultFunc func(r *Vault) *Vault
 
@@ -6832,17 +6829,14 @@ func (r *Vault) Jwt() *VaultJwtauth {
 
 // GetSecretJSON returns a Vault secret as a JSON string
 // this method corresponds to the Vault CLI command `vault kv get`
-func (r *Vault) Kvget(ctx context.Context, secret string) (string, error) {
-	if r.kvget != nil {
-		return *r.kvget, nil
-	}
+func (r *Vault) Kvget(secret string) *Secret {
 	q := r.q.Select("kvget")
 	q = q.Arg("secret", secret)
 
-	var response string
-
-	q = q.Bind(&response)
-	return response, q.Execute(ctx, r.c)
+	return &Secret{
+		q: q,
+		c: r.c,
+	}
 }
 
 func (r *Vault) Namespace(ctx context.Context) (string, error) {
@@ -6859,17 +6853,14 @@ func (r *Vault) Namespace(ctx context.Context) (string, error) {
 
 // Read returns a vault secret as a JSON string
 // this method corresponds to the Vault CLI command `vault read`
-func (r *Vault) Read(ctx context.Context, secret string) (string, error) {
-	if r.read != nil {
-		return *r.read, nil
-	}
+func (r *Vault) Read(secret string) *Secret {
 	q := r.q.Select("read")
 	q = q.Arg("secret", secret)
 
-	var response string
-
-	q = q.Bind(&response)
-	return response, q.Execute(ctx, r.c)
+	return &Secret{
+		q: q,
+		c: r.c,
+	}
 }
 
 // TestKVGet is a test function for the GetSecretJSON function
@@ -7011,10 +7002,7 @@ type VaultWriteOpts struct {
 // Write writes a vault secret and returns the response as a JSON string
 // this method corresponds to the Vault CLI command `vault write`
 // optional params can be passed as a comma separated list of key=value pairs
-func (r *Vault) Write(ctx context.Context, secret string, opts ...VaultWriteOpts) (string, error) {
-	if r.write != nil {
-		return *r.write, nil
-	}
+func (r *Vault) Write(secret string, opts ...VaultWriteOpts) *Secret {
 	q := r.q.Select("write")
 	for i := len(opts) - 1; i >= 0; i-- {
 		// `params` optional argument
@@ -7024,10 +7012,10 @@ func (r *Vault) Write(ctx context.Context, secret string, opts ...VaultWriteOpts
 	}
 	q = q.Arg("secret", secret)
 
-	var response string
-
-	q = q.Bind(&response)
-	return response, q.Execute(ctx, r.c)
+	return &Secret{
+		q: q,
+		c: r.c,
+	}
 }
 
 type VaultJwtauth struct {
@@ -7627,7 +7615,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg dockerUsername", err))
 				}
 			}
-			var dockerPassword string
+			var dockerPassword *Secret
 			if inputArgs["dockerPassword"] != nil {
 				err = json.Unmarshal([]byte(inputArgs["dockerPassword"]), &dockerPassword)
 				if err != nil {
@@ -7648,7 +7636,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg sha", err))
 				}
 			}
-			var secret string
+			var secret *Secret
 			if inputArgs["secret"] != nil {
 				err = json.Unmarshal([]byte(inputArgs["secret"]), &secret)
 				if err != nil {
@@ -7713,12 +7701,12 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 							WithArg("bin", dag.TypeDef().WithObject("Directory")).
 							WithArg("sha", dag.TypeDef().WithKind(StringKind)).
 							WithArg("dockerUsername", dag.TypeDef().WithKind(StringKind)).
-							WithArg("dockerPassword", dag.TypeDef().WithKind(StringKind))).
+							WithArg("dockerPassword", dag.TypeDef().WithObject("Secret"))).
 					WithFunction(
 						dag.Function("DeployToKubernetes",
 							dag.TypeDef().WithKind(VoidKind).WithOptional(true)).
 							WithArg("sha", dag.TypeDef().WithKind(StringKind)).
-							WithArg("secret", dag.TypeDef().WithKind(StringKind)).
+							WithArg("secret", dag.TypeDef().WithObject("Secret")).
 							WithArg("host", dag.TypeDef().WithKind(StringKind)).
 							WithArg("deployment", dag.TypeDef().WithObject("File")))), nil
 	default:
