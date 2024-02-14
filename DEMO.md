@@ -38,6 +38,17 @@ Let's run the Dagger pipeline to see what happens. You can see everything has wo
 If we check our Kubernetes cluster we can see the application has been deployed.
 
 ```bash
+dagger -m ./dagger/build call all \
+  --src . \
+  --docker-username=${DOCKER_USERNAME} \
+  --docker-password=DOCKER_PASSWORD \
+  --kube-addr=${KUBE_ADDR} \
+  --kube-access-token=KUBE_TOKEN
+```
+
+Then we can check to see what has been deployed
+
+```bash
 kubectl get pods
 ```
 

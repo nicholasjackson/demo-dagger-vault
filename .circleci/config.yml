@@ -7,29 +7,6 @@ jobs:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
-      - run:
-          name: Install Dagger CLI
-          command: cd /usr/local && { curl -L https://dl.dagger.io/dagger/install.sh | sudo sh; cd -; }
-      - run:
-          name: Fetch Dagger Cloud Token
-          command: |
-            dagger -m ./dagger/build \
-              call fetch-dagger-cloud-token \
-              --vault-addr="https://vault-cluster-public-vault-0bbbdae6.9eb86982.z1.hashicorp.cloud:8200/" \
-              --vault-namespace="/admin/dev" \
-              --circle-cioidctoken=CIRCLE_OIDC_TOKEN_V2 \
-              --output=./.dagger-cloud-token
-
-      - run:
-          name: Build And Deploy
-          command: |
-            export DAGGER_CLOUD_TOKEN=$(cat ./.dagger-cloud-token) 
-            dagger -m ./dagger/build \
-              call all \
-              --src=. \
-              --vault-addr="https://vault-cluster-public-vault-0bbbdae6.9eb86982.z1.hashicorp.cloud:8200/" \
-              --vault-namespace="/admin/dev" \
-              --circle-cioidctoken=CIRCLE_OIDC_TOKEN_V2 \
 
 workflows:
   dagger:

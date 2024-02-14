@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -11,48 +10,7 @@ import (
 var arches = []string{"amd64", "arm64"}
 var dockerImage = "nicholasjackson/hashitalks2024"
 
-type VaultSecrets struct {
-	k8sAccessToken *Secret
-	k8sAddr        string
-	dockerUsername string
-	dockerPassword *Secret
-}
-
 type Build struct {
-}
-
-// FetchDaggerCloudToken fetches the Dagger Cloud API token from Vault.
-func (b *Build) FetchDaggerCloudToken(
-	ctx context.Context,
-	vaultAddr, vaultNamespace string,
-	// +optional
-	actionsRequestToken *Secret,
-	// +optional
-	actionsTokenURL string,
-	// +optional
-	circleCIOIDCToken *Secret,
-) (string, error) {
-	jwt, authPath := b.getJWTAuthDetails(ctx, actionsRequestToken, actionsTokenURL, circleCIOIDCToken)
-
-	vc := dag.Vault().
-		WithHost(vaultAddr).
-		WithNamespace(vaultNamespace).
-		WithJwtauth(jwt, "hashitalks-deployer", VaultWithJwtauthOpts{Path: authPath})
-
-	jsSecret := vc.Kvget("secrets/hashitalks/deployment")
-	if jsSecret == nil {
-		return "", fmt.Errorf("failed to fetch secret")
-	}
-
-	// unmarshal the secret into an object
-	js, _ := jsSecret.Plaintext(ctx)
-	data := map[string]interface{}{}
-	err := json.Unmarshal([]byte(js), &data)
-	if err != nil {
-		return "", err
-	}
-
-	return data["dagger_cloud_token"].(string), nil
 }
 
 // All runs the unit tests, builds the application, packages it in a container, and pushes it to the registry.
@@ -63,24 +21,11 @@ func (b *Build) FetchDaggerCloudToken(
 func (b *Build) All(
 	ctx context.Context,
 	src *Directory,
-	vaultAddr string,
-	// +optional
-	vaultNamespace string,
-	// +optional
-	vaultUsername *Secret,
-	// +optional
-	vaultPassword *Secret,
-	// +optional
-	actionsRequestToken *Secret,
-	// +optional
-	actionsTokenURL string,
-	// +optional
-	circleCIOIDCToken *Secret,
+	dockerUsername string,
+	dockerPassword *Secret,
+	kubeAddr string,
+	kubeAccessToken *Secret,
 ) error {
-	if vaultAddr == "" {
-		return fmt.Errorf("vault address is required")
-	}
-
 	// run the unit tests
 	err := b.UnitTest(ctx, src, false)
 	if err != nil {
@@ -99,35 +44,13 @@ func (b *Build) All(
 		return err
 	}
 
-	var secrets *VaultSecrets
-
-	// fetch the vault secrets using the vault userpass
-	if vaultUsername != nil && vaultPassword != nil {
-		user, _ := vaultUsername.Plaintext(ctx)
-
-		secrets, err = b.fetchDeploymentSecretUserpass(ctx, vaultAddr, user, vaultPassword, vaultNamespace)
-		if err != nil {
-			return fmt.Errorf("failed to fetch deployment secret:%w", err)
-		}
-	}
-
-	// fetch the vault secrets using the vault oidc auth
-	if (actionsRequestToken != nil && actionsTokenURL != "") || circleCIOIDCToken != nil {
-		jwt, authPath := b.getJWTAuthDetails(ctx, actionsRequestToken, actionsTokenURL, circleCIOIDCToken)
-
-		secrets, err = b.fetchDeploymentSecretOIDC(ctx, vaultAddr, vaultNamespace, jwt, authPath)
-		if err != nil {
-			return fmt.Errorf("failed to fetch deployment secret:%w", err)
-		}
-	}
-
-	err = b.DockerBuildAndPush(ctx, out, sha, secrets.dockerUsername, secrets.dockerPassword)
+	err = b.DockerBuildAndPush(ctx, out, sha, dockerUsername, dockerPassword)
 	if err != nil {
 		return err
 	}
 
 	dep := src.File("/src/kubernetes/deploy.yaml")
-	err = b.DeployToKubernetes(ctx, sha, secrets.k8sAccessToken, secrets.k8sAddr, dep)
+	err = b.DeployToKubernetes(ctx, sha, kubeAccessToken, kubeAddr, dep)
 	if err != nil {
 		return fmt.Errorf("failed to deploy to Kubernetes:%w", err)
 	}
@@ -271,118 +194,6 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, token *Secre
 	return nil
 }
 
-func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername string, vaultPassword *Secret, vaultNamespace string) (*VaultSecrets, error) {
-	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
-
-	cli := dag.Pipeline("fetch-deployment-secret-userpass")
-
-	vc := cli.Vault().
-		WithHost(vaultHost).
-		WithNamespace(vaultNamespace).
-		WithUserpassAuth(vaultUsername, vaultPassword)
-
-	jsSecret := vc.Write("kubernetes/hashitalks/creds/deployer-default")
-	if jsSecret == nil {
-		return nil, fmt.Errorf("failed to fetch deployment secret")
-	}
-
-	// convert the secret to a string so that it can be unmarshalled
-	js, _ := jsSecret.Plaintext(ctx)
-
-	// unmarshal the secret into an object
-	data := map[string]interface{}{}
-	err := json.Unmarshal([]byte(js), &data)
-	if err != nil {
-		return nil, err
-	}
-
-	// set the k8s access token as a secret so that it does not leak
-	token := cli.SetSecret("access-token", data["service_account_token"].(string))
-
-	// fetch the static secrets from Vault
-	fmt.Println("Fetch static secret from Vault...", vaultHost)
-	jsSecret = vc.Kvget("secrets/hashitalks/deployment")
-	if jsSecret == nil {
-		return nil, fmt.Errorf("failed to fetch static secrets")
-	}
-
-	// convert the secret to a string so that it can be unmarshalled
-	js, _ = jsSecret.Plaintext(ctx)
-
-	// unmarshal the secret into an object
-	err = json.Unmarshal([]byte(js), &data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal deployment secret: %w", err)
-	}
-
-	dockerPassword := cli.SetSecret("dockerPassword", data["docker_password"].(string))
-
-	secrets := &VaultSecrets{
-		k8sAccessToken: token,
-		k8sAddr:        data["kube_addr"].(string),
-		dockerUsername: data["docker_username"].(string),
-		dockerPassword: dockerPassword,
-	}
-
-	return secrets, nil
-}
-
-func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultNamespace string, jwt *Secret, jwtAuthPath string) (*VaultSecrets, error) {
-	cli := dag.Pipeline("fetch-deployment-secret-oidc")
-
-	vc := cli.Vault().
-		WithHost(vaultHost).
-		WithNamespace(vaultNamespace).
-		WithJwtauth(jwt, "hashitalks-deployer", VaultWithJwtauthOpts{Path: jwtAuthPath})
-
-	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
-	jsSecret := vc.Write("kubernetes/hashitalks/creds/deployer-default")
-	if jsSecret == nil {
-		return nil, fmt.Errorf("failed to fetch deployment secret")
-	}
-
-	// convert the secret to a string so that it can be unmarshalled
-	js, _ := jsSecret.Plaintext(ctx)
-
-	// unmarshal the secret into an object
-	data := map[string]interface{}{}
-	err := json.Unmarshal([]byte(js), &data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal deployment secret: %w", err)
-	}
-
-	// set the k8s access token as a secret so that it does not leak
-	token := cli.SetSecret("access-token", data["service_account_token"].(string))
-
-	// fetch the static secrets from Vault
-	fmt.Println("Fetch static secret from Vault...", vaultHost)
-	jsSecret = vc.Kvget("secrets/hashitalks/deployment")
-	if jsSecret == nil {
-		return nil, fmt.Errorf("failed to fetch static secrets")
-	}
-
-	// convert the secret to a string so that it can be unmarshalled
-	js, _ = jsSecret.Plaintext(ctx)
-
-	// unmarshal the secret into an object
-	err = json.Unmarshal([]byte(js), &data)
-	if err != nil {
-		return nil, err
-	}
-
-	// set the docker password as a secret so that it does not leak
-	dockerPassword := cli.SetSecret("dockerPassword", data["docker_password"].(string))
-
-	secrets := &VaultSecrets{
-		k8sAccessToken: token,
-		k8sAddr:        data["kube_addr"].(string),
-		dockerUsername: data["docker_username"].(string),
-		dockerPassword: dockerPassword,
-	}
-
-	return secrets, nil
-}
-
 func (d *Build) goCache() *CacheVolume {
 	return dag.CacheVolume("go-cache")
 }
@@ -403,28 +214,4 @@ func (d *Build) getGitSHA(ctx context.Context, src *Directory) (string, error) {
 	}
 
 	return strings.TrimSpace(ref), nil
-}
-
-func (b *Build) getJWTAuthDetails(ctx context.Context, actionsRequestToken *Secret, actionsTokenURL string, circleCIOIDCToken *Secret) (*Secret, string) {
-	cli := dag.Pipeline("get-jwt-auth-details")
-
-	authPath := ""
-	var jwt *Secret
-
-	if actionsRequestToken != nil && actionsTokenURL != "" {
-		authPath = "jwt/github"
-		gitHubJWT, err := cli.Github().GetOidctoken(ctx, actionsRequestToken, actionsTokenURL)
-		if err != nil {
-			return nil, ""
-		}
-
-		jwt = cli.SetSecret("jwt", gitHubJWT)
-	}
-
-	if circleCIOIDCToken != nil {
-		authPath = "jwt/circleci"
-		jwt = circleCIOIDCToken
-	}
-
-	return jwt, authPath
 }
