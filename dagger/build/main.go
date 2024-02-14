@@ -270,7 +270,7 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, token *Secre
 	return nil
 }
 
-func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername string, vaultPassword *Secret, vaultNamespace string) (VaultSecrets, error) {
+func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, vaultUsername string, vaultPassword *Secret, vaultNamespace string) (*VaultSecrets, error) {
 	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
 
 	cli := dag.Pipeline("fetch-deployment-secret-userpass")
@@ -282,58 +282,10 @@ func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 
 	jsSecret := vc.Write("kubernetes/hashitalks/creds/deployer-default")
 	if jsSecret == nil {
-		return VaultSecrets{}, fmt.Errorf("failed to fetch deployment secret")
+		return nil, fmt.Errorf("failed to fetch deployment secret")
 	}
 
-	js, _ := jsSecret.Plaintext(ctx)
-	data := map[string]interface{}{}
-	err := json.Unmarshal([]byte(js), &data)
-	if err != nil {
-		return VaultSecrets{}, err
-	}
-
-	token := cli.SetSecret("access-token", data["service_account_token"].(string))
-
-	// fetch the static secrets from Vault
-	fmt.Println("Fetch static secret from Vault...", vaultHost)
-	jsSecret = vc.Kvget("secrets/hashitalks/deployment")
-
-	if jsSecret == nil {
-		return VaultSecrets{}, fmt.Errorf("failed to fetch static secrets")
-	}
-
-	js, _ = jsSecret.Plaintext(ctx)
-	err = json.Unmarshal([]byte(js), &data)
-	if err != nil {
-		return VaultSecrets{}, err
-	}
-
-	dockerPassword := cli.SetSecret("dockerPassword", data["docker_password"].(string))
-
-	secrets := VaultSecrets{
-		k8sAccessToken: token,
-		k8sAddr:        data["kube_addr"].(string),
-		dockerUsername: data["docker_username"].(string),
-		dockerPassword: dockerPassword,
-	}
-
-	return secrets, nil
-}
-
-func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultNamespace string, jwt *Secret, jwtAuthPath string) (VaultSecrets, error) {
-	cli := dag.Pipeline("fetch-deployment-secret-oidc")
-
-	vc := cli.Vault().
-		WithHost(vaultHost).
-		WithNamespace(vaultNamespace).
-		WithJwtauth(jwt, "hashitalks-deployer", VaultWithJwtauthOpts{Path: jwtAuthPath})
-
-	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
-	jsSecret := vc.Write("kubernetes/hashitalks/creds/deployer-default")
-	if jsSecret == nil {
-		return VaultSecrets{}, fmt.Errorf("failed to fetch deployment secret")
-	}
-
+	// convert the secret to a string so that it can be unmarshalled
 	js, _ := jsSecret.Plaintext(ctx)
 
 	// unmarshal the secret into an object
@@ -353,15 +305,74 @@ func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultN
 		return VaultSecrets{}, fmt.Errorf("failed to fetch static secrets")
 	}
 
+	// convert the secret to a string so that it can be unmarshalled
+	js, _ = jsSecret.Plaintext(ctx)
+
+	// unmarshal the secret into an object
 	err = json.Unmarshal([]byte(js), &data)
 	if err != nil {
-		return VaultSecrets{}, err
+		return nil, fmt.Errorf("failed to unmarshal deployment secret: %w", err)
+	}
+
+	dockerPassword := cli.SetSecret("dockerPassword", data["docker_password"].(string))
+
+	secrets := &VaultSecrets{
+		k8sAccessToken: token,
+		k8sAddr:        data["kube_addr"].(string),
+		dockerUsername: data["docker_username"].(string),
+		dockerPassword: dockerPassword,
+	}
+
+	return secrets, nil
+}
+
+func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultNamespace string, jwt *Secret, jwtAuthPath string) (*VaultSecrets, error) {
+	cli := dag.Pipeline("fetch-deployment-secret-oidc")
+
+	vc := cli.Vault().
+		WithHost(vaultHost).
+		WithNamespace(vaultNamespace).
+		WithJwtauth(jwt, "hashitalks-deployer", VaultWithJwtauthOpts{Path: jwtAuthPath})
+
+	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
+	jsSecret := vc.Write("kubernetes/hashitalks/creds/deployer-default")
+	if jsSecret == nil {
+		return nil, fmt.Errorf("failed to fetch deployment secret")
+	}
+
+	// convert the secret to a string so that it can be unmarshalled
+	js, _ := jsSecret.Plaintext(ctx)
+
+	// unmarshal the secret into an object
+	data := map[string]interface{}{}
+	err := json.Unmarshal([]byte(js), &data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal deployment secret: %w", err)
+	}
+
+	// set the k8s access token as a secret so that it does not leak
+	token := cli.SetSecret("access-token", data["service_account_token"].(string))
+
+	// fetch the static secrets from Vault
+	fmt.Println("Fetch static secret from Vault...", vaultHost)
+	jsSecret = vc.Kvget("secrets/hashitalks/deployment")
+	if jsSecret == nil {
+		return nil, fmt.Errorf("failed to fetch static secrets")
+	}
+
+	// convert the secret to a string so that it can be unmarshalled
+	js, _ = jsSecret.Plaintext(ctx)
+
+	// unmarshal the secret into an object
+	err = json.Unmarshal([]byte(js), &data)
+	if err != nil {
+		return nil, err
 	}
 
 	// set the docker password as a secret so that it does not leak
 	dockerPassword := cli.SetSecret("dockerPassword", data["docker_password"].(string))
 
-	secrets := VaultSecrets{
+	secrets := &VaultSecrets{
 		k8sAccessToken: token,
 		k8sAddr:        data["kube_addr"].(string),
 		dockerUsername: data["docker_username"].(string),
