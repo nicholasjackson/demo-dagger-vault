@@ -67,7 +67,7 @@ func (d *Build) UnitTest(ctx context.Context, src *Directory, withRace bool) err
 	}
 
 	golang := cli.Container().
-		From("golang:latest").
+		From("golang:1.22").
 		WithDirectory("/files", src).
 		WithMountedCache("/go/pkg/mod", d.goCache()).
 		WithWorkdir("/files/src").
@@ -86,7 +86,7 @@ func (d *Build) Build(ctx context.Context, src *Directory) (*Directory, error) {
 
 	// get `golang` image
 	golang := cli.Container().
-		From("golang:latest").
+		From("golang:1.22").
 		WithDirectory("/files", src).
 		WithWorkdir("/files/src").
 		WithMountedCache("/go/pkg/mod", d.goCache())
@@ -130,7 +130,7 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha, doc
 
 		// get `docker` image
 		docker := cli.Container(ContainerOpts{Platform: Platform(fmt.Sprintf("linux/%s", goarch))}).
-			From("alpine:latest").
+			From("alpine:3.19").
 			WithFile("/bin/app", bin.File(path)).
 			WithExec([]string{"chmod", "+x", "/bin/app", "."}).
 			WithEntrypoint([]string{"/bin/app"})
@@ -175,7 +175,7 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, token *Secre
 	tkn, _ := token.Plaintext(ctx)
 
 	out, err := cli.Container().
-		From("bitnami/kubectl").
+		From("bitnami/kubectl:1.29").
 		WithDirectory("/files", df).
 		WithEnvVariable("CACHE_INVALIDATE", time.Now().String()).
 		WithExec([]string{
