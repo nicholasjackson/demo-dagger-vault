@@ -99,7 +99,7 @@ func (b *Build) All(
 		return err
 	}
 
-	var secrets VaultSecrets
+	var secrets *VaultSecrets
 
 	// fetch the vault secrets using the vault userpass
 	if vaultUsername != nil && vaultPassword != nil {
