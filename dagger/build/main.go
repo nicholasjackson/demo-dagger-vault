@@ -249,15 +249,16 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, token *Secre
 	newDep := strings.ReplaceAll(string(dStr), "##DOCKER_IMAGE##", fmt.Sprintf("%s:%s", dockerImage, sha))
 	df := cli.Directory().WithNewFile("deploy.yaml", newDep)
 
+	tkn, _ := token.Plaintext(ctx)
+
 	out, err := cli.Container().
 		From("bitnami/kubectl").
 		WithDirectory("/files", df).
 		WithEnvVariable("CACHE_INVALIDATE", time.Now().String()).
-		WithSecretVariable("KUBE_TOKEN", token).
 		WithExec([]string{
 			"apply",
 			"-f", "/files/deploy.yaml",
-			"--token", "$KUBE_TOKEN",
+			"--token", tkn,
 			"--server", host,
 			"--insecure-skip-tls-verify",
 		}).Stdout(ctx)
