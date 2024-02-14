@@ -292,7 +292,7 @@ func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 	data := map[string]interface{}{}
 	err := json.Unmarshal([]byte(js), &data)
 	if err != nil {
-		return VaultSecrets{}, err
+		return nil, err
 	}
 
 	// set the k8s access token as a secret so that it does not leak
@@ -302,7 +302,7 @@ func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 	fmt.Println("Fetch static secret from Vault...", vaultHost)
 	jsSecret = vc.Kvget("secrets/hashitalks/deployment")
 	if jsSecret == nil {
-		return VaultSecrets{}, fmt.Errorf("failed to fetch static secrets")
+		return nil, fmt.Errorf("failed to fetch static secrets")
 	}
 
 	// convert the secret to a string so that it can be unmarshalled
