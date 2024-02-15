@@ -12,5 +12,5 @@ func main() {
 }
 
 func mainHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello from HashiTalks 2024 v0.2")
+	fmt.Fprintf(w, "Hello from HashiTalks 2024 v0.3")
 }
