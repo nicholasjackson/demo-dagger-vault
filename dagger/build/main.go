@@ -15,9 +15,6 @@ type Build struct {
 
 // All runs the unit tests, builds the application, packages it in a container, and pushes it to the registry.
 // It also fetches a secret from Vault and deploys the application to Kubernetes.
-//
-// If the optional parameters for Docker are not provided, the corresponding steps are skipped.
-// If the optional parameters fro Vault and Kubernetes are not provided, the corresponding steps are skipped.
 func (b *Build) All(
 	ctx context.Context,
 	src *Directory,
@@ -58,6 +55,7 @@ func (b *Build) All(
 	return nil
 }
 
+// UnitTest runs the unit tests for the application.
 func (d *Build) UnitTest(ctx context.Context, src *Directory, withRace bool) error {
 	cli := dag.Pipeline("unit-test")
 
@@ -78,6 +76,7 @@ func (d *Build) UnitTest(ctx context.Context, src *Directory, withRace bool) err
 	return err
 }
 
+// Build compiles the application for multiple architectures.
 func (d *Build) Build(ctx context.Context, src *Directory) (*Directory, error) {
 	cli := dag.Pipeline("build")
 
@@ -116,6 +115,7 @@ func (d *Build) Build(ctx context.Context, src *Directory) (*Directory, error) {
 	return outputs, nil
 }
 
+// DockerBuildAndPush builds the Docker image for the application and pushes it to the registry.
 func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha, dockerUsername string, dockerPassword *Secret) error {
 	fmt.Println("Building Docker image...")
 
@@ -157,6 +157,7 @@ func (d *Build) DockerBuildAndPush(ctx context.Context, bin *Directory, sha, doc
 	return nil
 }
 
+// DeployToKubernetes deploys the application to Kubernetes.
 func (d *Build) DeployToKubernetes(ctx context.Context, sha string, token *Secret, host string, deployment *File) error {
 	fmt.Println("Deploy to Kubernetes...", host, sha)
 
@@ -194,10 +195,12 @@ func (d *Build) DeployToKubernetes(ctx context.Context, sha string, token *Secre
 	return nil
 }
 
+// goCache returns the cache volume for the Go build environment.
 func (d *Build) goCache() *CacheVolume {
 	return dag.CacheVolume("go-cache")
 }
 
+// getGitSHA returns the latest git sha from the source repository
 func (d *Build) getGitSHA(ctx context.Context, src *Directory) (string, error) {
 	cli := dag.Pipeline("get-git-sha")
 
