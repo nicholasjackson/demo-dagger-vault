@@ -282,16 +282,16 @@ func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 		WithUserpassAuth(vaultUsername, vaultPassword)
 
 	jsSecret := vc.Write("kubernetes/hashitalks/creds/deployer-default")
-	if jsSecret == nil {
-		return nil, fmt.Errorf("failed to fetch deployment secret")
-	}
 
 	// convert the secret to a string so that it can be unmarshalled
-	js, _ := jsSecret.Plaintext(ctx)
+	js, err := jsSecret.Plaintext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch deployment secret %w", err)
+	}
 
 	// unmarshal the secret into an object
 	data := map[string]interface{}{}
-	err := json.Unmarshal([]byte(js), &data)
+	err = json.Unmarshal([]byte(js), &data)
 	if err != nil {
 		return nil, err
 	}
@@ -302,12 +302,12 @@ func (d *Build) fetchDeploymentSecretUserpass(ctx context.Context, vaultHost, va
 	// fetch the static secrets from Vault
 	fmt.Println("Fetch static secret from Vault...", vaultHost)
 	jsSecret = vc.Kvget("secrets/hashitalks/deployment")
-	if jsSecret == nil {
-		return nil, fmt.Errorf("failed to fetch static secrets")
-	}
 
 	// convert the secret to a string so that it can be unmarshalled
-	js, _ = jsSecret.Plaintext(ctx)
+	js, err = jsSecret.Plaintext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch static secrets:%w", err)
+	}
 
 	// unmarshal the secret into an object
 	err = json.Unmarshal([]byte(js), &data)
@@ -337,16 +337,16 @@ func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultN
 
 	fmt.Println("Fetch deployment secret from Vault...", vaultHost)
 	jsSecret := vc.Write("kubernetes/hashitalks/creds/deployer-default")
-	if jsSecret == nil {
-		return nil, fmt.Errorf("failed to fetch deployment secret")
-	}
 
 	// convert the secret to a string so that it can be unmarshalled
-	js, _ := jsSecret.Plaintext(ctx)
+	js, err := jsSecret.Plaintext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch deployment secret:%w", err)
+	}
 
 	// unmarshal the secret into an object
 	data := map[string]interface{}{}
-	err := json.Unmarshal([]byte(js), &data)
+	err = json.Unmarshal([]byte(js), &data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal deployment secret: %w", err)
 	}
@@ -357,12 +357,12 @@ func (d *Build) fetchDeploymentSecretOIDC(ctx context.Context, vaultHost, vaultN
 	// fetch the static secrets from Vault
 	fmt.Println("Fetch static secret from Vault...", vaultHost)
 	jsSecret = vc.Kvget("secrets/hashitalks/deployment")
-	if jsSecret == nil {
-		return nil, fmt.Errorf("failed to fetch static secrets")
-	}
 
 	// convert the secret to a string so that it can be unmarshalled
 	js, _ = jsSecret.Plaintext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch static secrets:%w", err)
+	}
 
 	// unmarshal the secret into an object
 	err = json.Unmarshal([]byte(js), &data)
