@@ -102,15 +102,26 @@ vault write kubernetes/hashitalks/config \
   service_account_jwt="$(op item get 'HashiTalks 2024' --fields 'Kubernetes.sa_token')"
 ```
 
-
 Now this has been configured we can create a roll that grants permission to the service account to
 create and delete pods and services in the default namespace. We are using `default` for convenience
 but in a real world scenario you would use a more specific namespace.
 
-```bash
+```shell
 vault write kubernetes/hashitalks/roles/deployer-default \
   allowed_kubernetes_namespaces="default" \
-  generated_role_rules="'rules': [{'apiGroups': [''], 'resources': ['pods','services'], 'verbs': ['get', 'list', 'create', 'update', 'patch', 'delete']},{'apiGroups': ['apps'], 'resources': ['deployments'], 'verbs': ['get', 'list', 'create', 'update', 'patch', 'delete']}]"
+  generated_role_rules="'rules': [
+    {
+      'apiGroups': [''], 
+      'resources': ['pods','services'], 
+      'verbs': ['get', 'list', 'create', 
+      'update', 'patch', 'delete']
+    },
+    {
+      'apiGroups': ['apps'], 
+      'resources': ['deployments'], 
+      'verbs': ['get', 'list', 'create', 'update', 'patch', 'delete']
+    }
+  ]"
 ```
 
 Ok now that is done, let's give it a quick test before we modify the pipeline.
